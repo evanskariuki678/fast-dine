@@ -341,7 +341,8 @@ const initialRouteParams = new URLSearchParams(window.location.search);
 const storedProfile = read("tamu-profile", { name: "", email: "", phone: "", address: "Kilimani, Nairobi", apartment: "", note: "" });
 const state = {
   cart: read("tamu-cart", []),
-  orders: read("tamu-orders", []),
+  orders: supabaseConfigured ? [] : read("tamu-orders", []),
+  submittingOrder: false,
   profile: storedProfile,
   payments: normalizePaymentMethods(read("tamu-payments", []), storedProfile),
   checkoutPaymentId: read("tamu-checkout-payment", ""),
@@ -375,7 +376,7 @@ const promoDiscount = () => state.promoCode === "FAST10" ? Math.round(subtotal()
 const currentPath = () => window.location.pathname;
 const save = () => {
   localStorage.setItem("tamu-cart", JSON.stringify(state.cart));
-  localStorage.setItem("tamu-orders", JSON.stringify(state.orders));
+  if (!supabaseConfigured) localStorage.setItem("tamu-orders", JSON.stringify(state.orders));
   localStorage.setItem("tamu-profile", JSON.stringify(state.profile));
   localStorage.setItem("tamu-payments", JSON.stringify(state.payments));
   localStorage.setItem("tamu-checkout-payment", JSON.stringify(state.checkoutPaymentId));
@@ -467,6 +468,37 @@ async function writeCustomerProfile(user) {
   save();
 }
 
+async function refreshCustomerOrders() {
+  if (!supabase) return;
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id, order_number, status, placed_at, total_kes, delivery_address, payment_method_label, store_id, stores(name), order_items(product_id, product_name, quantity, unit_price_kes)")
+    .order("placed_at", { ascending: false });
+  if (error) throw error;
+
+  state.orders = (data || []).map(order => ({
+    id: order.id,
+    orderNumber: order.order_number,
+    createdAt: order.placed_at,
+    store: order.stores?.name || "Fast Dine order",
+    items: (order.order_items || []).map(item => ({
+      id: item.product_id?.startsWith(`${order.store_id}__`)
+        ? item.product_id.slice(order.store_id.length + 2)
+        : item.product_id,
+      name: item.product_name,
+      qty: item.quantity,
+      price: item.unit_price_kes,
+      store: order.store_id
+    })),
+    total: order.total_kes,
+    status: order.status,
+    address: order.delivery_address?.address_line || "",
+    paymentMethod: order.payment_method_label,
+    persisted: true
+  }));
+  save();
+}
+
 async function handleAuthSession(event, session) {
   state.supabaseBootstrapped = true;
   state.authBootstrapped = true;
@@ -491,6 +523,12 @@ async function handleAuthSession(event, session) {
   }
 
   await writeCustomerProfile(session.user);
+  try {
+    await refreshCustomerOrders();
+  } catch (error) {
+    console.error("Could not load saved Fast Dine orders:", error);
+    if (currentPath().startsWith("/en/profile")) toast("You're signed in, but your saved orders could not be loaded.");
+  }
   if (["INITIAL_SESSION", "SIGNED_IN"].includes(event) && currentPath() === "/en/auth/callback") {
     const destination = loginReturnPath();
     clearAuthFlow();
@@ -755,7 +793,7 @@ function checkoutPage() {
   }).join("");
   const store = stores.find(item => item.id === state.cart[0]?.store);
   const itemCountLabel = `${cartQty()} ${cartQty() === 1 ? "item" : "items"}`;
-  return `<main class="checkout-page"><div class="breadcrumbs"><button data-route="${BASE}">Home</button><span>›</span><b>Checkout</b></div><div class="checkout-title"><div><p class="eyebrow">REVIEW YOUR ORDER</p><h1>Checkout</h1><p>Confirm your delivery and payment details before placing your order.</p></div><span class="checkout-step"><i>1</i> Your details <b>—</b> <i class="current">2</i> Review & pay</span></div><div class="checkout-layout"><section class="checkout-main"><div class="checkout-card delivery-checkout-card"><div class="card-heading"><div><span class="step-icon">⌖</span><div><h2>Delivery address</h2><p>Where should we bring your order?</p></div></div><button data-action="address">Change</button></div><div class="delivery-address"><span class="delivery-address-label">DELIVERING TO</span><b>${escapeHtml(state.profile.address || "Add a delivery address")}</b>${state.profile.apartment ? `<span>${escapeHtml(state.profile.apartment)}</span>` : ""}${state.profile.phone ? `<span class="delivery-contact">Contact: ${escapeHtml(state.profile.phone)}</span>` : ""}<small><i>●</i> Estimated delivery · 25–40 min</small></div><button class="add-instructions" data-action="instructions">${state.profile.note ? "✎ Edit delivery instructions" : "＋ Add delivery instructions"}</button>${state.profile.note ? `<p class="delivery-note">${escapeHtml(state.profile.note)}</p>` : ""}</div><div class="checkout-card payment-checkout-card"><div class="card-heading"><div><span class="step-icon">▤</span><div><h2>Payment method</h2><p>Choose how you’d like to pay for this order.</p></div></div><button data-route="/en/profile/account/payment-methods">Manage</button></div><div class="checkout-payments">${methods || `<div class="no-payment"><p>No payment methods added yet.</p><button data-action="add-payment-method">Add a payment method <span>→</span></button></div>`}</div>${state.payments.length ? `<button class="checkout-add-payment" data-action="add-payment-method">＋ Add another payment method</button>` : ""}<p class="checkout-payment-note"><span>🔒</span> Payment details stay protected. This storefront preview does not process payments or store full card details, security codes or M-Pesa PINs.</p></div><div class="checkout-card basket-checkout-card"><div class="card-heading"><div><span class="step-icon">🛍️</span><div><h2>Your items <small>${itemCountLabel}</small></h2><p>${store ? `From ${escapeHtml(store.name)} · ${store.time} delivery` : "Review items and quantities in your order."}</p></div></div><button data-route="${BASE}">Add items</button></div>${state.cart.length ? `<div class="checkout-items">${state.cart.map(item => { const product = productInfo(item.id); return `<div class="checkout-item"><img src="${product?.image || ""}" alt="${escapeAttr(item.name)}" loading="lazy"><div><b>${escapeHtml(item.name)}</b><small>${money(item.price)} each</small><div class="quantity-control"><button data-qty="${escapeAttr(item.id)}" data-delta="-1" aria-label="Remove one ${escapeAttr(item.name)}">−</button><span>${item.qty}</span><button data-qty="${escapeAttr(item.id)}" data-delta="1" aria-label="Add one ${escapeAttr(item.name)}">＋</button></div></div><strong>${money(item.qty * item.price)}</strong></div>`; }).join("")}</div>` : `<div class="empty-basket-inline"><span>🧺</span><p>Your basket is empty. Add a local favourite before checkout.</p><button data-route="${BASE}">Explore restaurants <span>→</span></button></div>`}</div></section><aside class="checkout-summary"><div class="summary-sticky"><p class="eyebrow">ORDER TOTAL</p><h2>Price details</h2><div class="summary-line"><span>Items <small>${itemCountLabel}</small></span><b>${money(subtotal())}</b></div><div class="summary-line"><span>Delivery fee <small>${store?.name ? `From ${escapeHtml(store.name)}` : "Local delivery"}</small></span><b>${money(fee)}</b></div><div class="summary-line"><span>Service fee <small>Order handling</small></span><b>${money(serviceFee)}</b></div>${discount ? `<div class="summary-line promo-discount"><span>${escapeHtml(state.promoCode)} discount</span><b>−${money(discount)}</b></div>` : ""}<button class="promo-button" data-route="/en/profile/account/promo-codes">${state.promoCode ? `${escapeHtml(state.promoCode)} applied · Manage promo` : "＋ Add a promo code"}</button><div class="summary-total"><span>Total to pay <small>All listed charges included</small></span><strong>${money(total)}</strong></div><button class="button-dark place-order" data-action="place-order" ${!state.cart.length || !activePayment ? "disabled" : ""}>Place order <span>→</span></button><p class="checkout-terms">Your order will be sent to ${escapeHtml(state.profile.address || "your delivery address")}.</p></div><div class="checkout-help"><span>♡</span><div><b>Need a hand?</b><small>Questions about your order? <a href="mailto:hello@fastdine.example">Contact support</a></small></div></div></aside></div>${footer()}</main>`;
+  return `<main class="checkout-page"><div class="breadcrumbs"><button data-route="${BASE}">Home</button><span>›</span><b>Checkout</b></div><div class="checkout-title"><div><p class="eyebrow">REVIEW YOUR ORDER</p><h1>Checkout</h1><p>Confirm your delivery and payment details before placing your order.</p></div><span class="checkout-step"><i>1</i> Your details <b>—</b> <i class="current">2</i> Review & pay</span></div><div class="checkout-layout"><section class="checkout-main"><div class="checkout-card delivery-checkout-card"><div class="card-heading"><div><span class="step-icon">⌖</span><div><h2>Delivery address</h2><p>Where should we bring your order?</p></div></div><button data-action="address">Change</button></div><div class="delivery-address"><span class="delivery-address-label">DELIVERING TO</span><b>${escapeHtml(state.profile.address || "Add a delivery address")}</b>${state.profile.apartment ? `<span>${escapeHtml(state.profile.apartment)}</span>` : ""}${state.profile.phone ? `<span class="delivery-contact">Contact: ${escapeHtml(state.profile.phone)}</span>` : ""}<small><i>●</i> Estimated delivery · 25–40 min</small></div><button class="add-instructions" data-action="instructions">${state.profile.note ? "✎ Edit delivery instructions" : "＋ Add delivery instructions"}</button>${state.profile.note ? `<p class="delivery-note">${escapeHtml(state.profile.note)}</p>` : ""}</div><div class="checkout-card payment-checkout-card"><div class="card-heading"><div><span class="step-icon">▤</span><div><h2>Payment method</h2><p>Choose how you’d like to pay for this order.</p></div></div><button data-route="/en/profile/account/payment-methods">Manage</button></div><div class="checkout-payments">${methods || `<div class="no-payment"><p>No payment methods added yet.</p><button data-action="add-payment-method">Add a payment method <span>→</span></button></div>`}</div>${state.payments.length ? `<button class="checkout-add-payment" data-action="add-payment-method">＋ Add another payment method</button>` : ""}<p class="checkout-payment-note"><span>🔒</span> Payment details stay protected. This storefront preview does not process payments or store full card details, security codes or M-Pesa PINs.</p></div><div class="checkout-card basket-checkout-card"><div class="card-heading"><div><span class="step-icon">🛍️</span><div><h2>Your items <small>${itemCountLabel}</small></h2><p>${store ? `From ${escapeHtml(store.name)} · ${store.time} delivery` : "Review items and quantities in your order."}</p></div></div><button data-route="${BASE}">Add items</button></div>${state.cart.length ? `<div class="checkout-items">${state.cart.map(item => { const product = productInfo(item.id); return `<div class="checkout-item"><img src="${product?.image || ""}" alt="${escapeAttr(item.name)}" loading="lazy"><div><b>${escapeHtml(item.name)}</b><small>${money(item.price)} each</small><div class="quantity-control"><button data-qty="${escapeAttr(item.id)}" data-delta="-1" aria-label="Remove one ${escapeAttr(item.name)}" ${state.submittingOrder ? "disabled" : ""}>−</button><span>${item.qty}</span><button data-qty="${escapeAttr(item.id)}" data-delta="1" aria-label="Add one ${escapeAttr(item.name)}" ${state.submittingOrder ? "disabled" : ""}>＋</button></div></div><strong>${money(item.qty * item.price)}</strong></div>`; }).join("")}</div>` : `<div class="empty-basket-inline"><span>🧺</span><p>Your basket is empty. Add a local favourite before checkout.</p><button data-route="${BASE}">Explore restaurants <span>→</span></button></div>`}</div></section><aside class="checkout-summary"><div class="summary-sticky"><p class="eyebrow">ORDER TOTAL</p><h2>Price details</h2><div class="summary-line"><span>Items <small>${itemCountLabel}</small></span><b>${money(subtotal())}</b></div><div class="summary-line"><span>Delivery fee <small>${store?.name ? `From ${escapeHtml(store.name)}` : "Local delivery"}</small></span><b>${money(fee)}</b></div><div class="summary-line"><span>Service fee <small>Order handling</small></span><b>${money(serviceFee)}</b></div>${discount ? `<div class="summary-line promo-discount"><span>${escapeHtml(state.promoCode)} discount</span><b>−${money(discount)}</b></div>` : ""}<button class="promo-button" data-route="/en/profile/account/promo-codes">${state.promoCode ? `${escapeHtml(state.promoCode)} applied · Manage promo` : "＋ Add a promo code"}</button><div class="summary-total"><span>Total to pay <small>All listed charges included</small></span><strong>${money(total)}</strong></div><button class="button-dark place-order" data-action="place-order" ${!state.cart.length || !activePayment || state.submittingOrder ? "disabled" : ""}>${state.submittingOrder ? "Saving order…" : "Place order"} <span>→</span></button><p class="checkout-terms">This order is saved to your account. No payment or delivery is triggered.</p></div><div class="checkout-help"><span>♡</span><div><b>Need a hand?</b><small>Questions about your order? <a href="mailto:hello@fastdine.example">Contact support</a></small></div></div></aside></div>${footer()}</main>`;
 }
 
 function renderOverlay() {
@@ -787,7 +825,7 @@ function modalContent() {
   if (state.modal === "instructions") return `<div class="overlay-backdrop" data-close="modal"><section class="simple-modal" role="dialog" aria-modal="true"><button class="modal-close" data-close="modal">×</button><span class="modal-illustration">✎</span><p class="eyebrow">A HELPFUL LITTLE NOTE</p><h2>Delivery instructions</h2><p>Let your courier know anything that makes finding you easier.</p><form data-form="instructions"><label>Note for your courier<textarea name="note" placeholder="Gate code, landmark, or where to leave the order">${escapeHtml(state.profile.note)}</textarea></label><button class="button-dark full-width">Save instructions <span>→</span></button></form></section></div>`;
   if (state.modal === "search") return `<div class="overlay-backdrop" data-close="modal"><section class="simple-modal"><button class="modal-close" data-close="modal">×</button><p class="eyebrow">FIND YOUR NEXT FAVOURITE</p><h2>What sounds good?</h2><div class="modal-search"><span>⌕</span><input id="modal-search" placeholder="Dishes, shops, groceries..." value="${escapeAttr(state.search)}" autofocus></div><div class="search-suggestions">${["Burgers", "Groceries", "Coffee", "Flowers"].map(term => `<button data-search-term="${term}">${term} ↗</button>`).join("")}</div></section></div>`;
   if (state.modal === "sort") return `<div class="overlay-backdrop" data-close="modal"><section class="simple-modal"><button class="modal-close" data-close="modal">×</button><p class="eyebrow">MAKE IT YOURS</p><h2>Sort & filter</h2><div class="filter-modal-content"><b>Sort by</b>${["Recommended", "Top rated", "Fastest delivery"].map((term, i) => `<label><input type="radio" name="sort" value="${term}" ${i === 0 ? "checked" : ""}>${term}</label>`).join("")}<b>Delivery fee</b><label><input type="checkbox">Free delivery</label><button class="button-dark full-width" data-action="apply-filter">Show places <span>→</span></button></div></section></div>`;
-  if (state.modal === "placed") return `<div class="overlay-backdrop"><section class="simple-modal success-modal"><span class="success-check">✓</span><p class="eyebrow">PREVIEW ORDER</p><h2>Your demo order is saved.</h2><p>No payment was processed and no courier was contacted. You can review this sample order in your account.</p><div class="success-order"><span>Payment method</span><b>${escapeHtml(state.orders[0]?.paymentMethod || "Selected at checkout")}</b></div><button class="button-dark full-width" data-action="view-orders">View my orders <span>→</span></button><button class="keep-shopping" data-route="${BASE}">Back to The Fast Dine</button></section></div>`;
+  if (state.modal === "placed") return `<div class="overlay-backdrop"><section class="simple-modal success-modal"><span class="success-check">✓</span><p class="eyebrow">${state.orders[0]?.persisted ? "ORDER SAVED" : "PREVIEW ORDER"}</p><h2>${state.orders[0]?.persisted ? "Your order is in your account." : "Your demo order is saved."}</h2><p>No payment was processed and no courier was contacted. ${state.orders[0]?.persisted ? "This order has been saved for your account." : "This sample order is saved in this browser preview."}</p><div class="success-order"><span>Order number</span><b>${escapeHtml(state.orders[0]?.orderNumber || "Preview order")}</b></div><div class="success-order"><span>Payment method</span><b>${escapeHtml(state.orders[0]?.paymentMethod || "Selected at checkout")}</b></div><button class="button-dark full-width" data-action="view-orders">View my orders <span>→</span></button><button class="keep-shopping" data-route="${BASE}">Back to The Fast Dine</button></section></div>`;
   if (state.modal === "support") return `<div class="support-backdrop" data-close="modal"><aside class="support-panel" role="dialog" aria-modal="true"><div class="support-head"><div><span class="support-head-icon">✳</span><h2>Support Centre</h2></div><button data-close="modal" aria-label="Close support">⌄</button></div><div class="support-body"><h3>${state.supportTopic ? supportTopicTitle() : "What can we help with?"}</h3>${state.supportTopic === "orders" ? `<div class="support-info-card">${state.orders.length ? `<p>Your recent orders are listed in your account.</p><button data-route="/en/profile/past-orders">View past orders <span>↗</span></button>` : `<span class="support-illustration">🛍️</span><b>Your recent orders will show up here.</b>`}</div><button class="support-choice" data-route="/en/profile/past-orders"><span class="support-emoji">📍</span><b>My orders</b><span class="support-arrow">›</span></button>` : state.supportTopic === "requests" ? `<div class="support-info-card"><span class="support-illustration">✉️</span><b>No open requests yet.</b><p>If you need us, choose a topic and send us a note.</p></div><button class="support-choice" data-support-topic="other"><span class="support-emoji">💬</span><b>Start a support request</b><span class="support-arrow">›</span></button>` : state.supportTopic === "other" ? `<button class="support-back-link" data-support-topic="">← All support topics</button><p class="support-section-label">Choose a topic</p>${["Something went wrong with an order", "Payment or refund", "Account and personal details", "Delivery question"].map((topic, i) => `<button class="support-choice support-topic-choice" data-support-topic="${escapeAttr(topic)}"><span class="support-emoji">${["📦", "💳", "👤", "🚲"][i]}</span><b>${topic}</b><span class="support-arrow">›</span></button>`).join("")}` : state.supportTopic ? `<button class="support-back-link" data-support-topic="other">← Choose another topic</button><div class="support-info-card"><span class="support-illustration">💬</span><b>We're here to help.</b><p>Tell us a little more and our Nairobi support team will get back to you.</p><button data-action="contact-support">Contact support <span>→</span></button></div>` : `<div class="support-info-card"><span class="support-illustration">🛍️</span><b>${state.orders.length ? `Your last order: ${escapeHtml(state.orders[0].store)}` : "You'll see your most recent orders here."}</b>${state.orders.length ? `<p>${new Date(state.orders[0].createdAt).toLocaleDateString("en-KE", { month: "short", day: "numeric" })} · ${money(state.orders[0].total)}</p>` : ""}</div><button class="support-choice" data-support-topic="orders"><span class="support-emoji">📍</span><b>My orders</b><span class="support-arrow">›</span></button><button class="support-choice" data-support-topic="other"><span class="support-emoji">💬</span><b>Something else</b><span class="support-arrow">›</span></button><p class="support-section-label">Follow up</p><button class="support-choice" data-support-topic="requests"><span class="support-emoji">✉️</span><b>My requests</b><span class="support-arrow">›</span></button>`}</div></aside></div>`;
   return "";
 }
@@ -830,6 +868,7 @@ function render() {
 }
 
 function addProduct(productId, storeId) {
+  if (state.submittingOrder) return;
   const product = productInfo(productId);
   if (!product) return;
   if (state.cart.length && state.cart[0].store !== storeId) {
@@ -845,6 +884,7 @@ function addProduct(productId, storeId) {
 }
 
 function updateQty(id, delta) {
+  if (state.submittingOrder) return;
   const item = state.cart.find(entry => entry.id === id);
   if (!item) return;
   item.qty += delta;
@@ -858,8 +898,70 @@ function submitOrder() {
   const payment = selectedPayment();
   if (!payment) { navigate("/en/profile/account/payment-methods"); toast("Add a payment method before checkout."); return; }
   const store = stores.find(item => item.id === state.cart[0].store);
+  if (supabaseConfigured) {
+    if (!supabase) { toast("Orders are unavailable because Supabase is not configured."); return; }
+    void (async () => {
+      try {
+        state.submittingOrder = true;
+        render();
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        if (!authData.user) {
+          navigate(`/en/login?${new URLSearchParams({ returnPath: `${BASE}/order-summary` })}`);
+          toast("Sign in before placing your order.");
+          return;
+        }
+
+        const { data: order, error } = await supabase.rpc("create_order", {
+          p_store_id: state.cart[0].store,
+          p_items: state.cart.map(item => ({ product_id: item.id, quantity: item.qty })),
+          p_delivery_address: {
+            recipient_name: state.profile.name,
+            phone: state.profile.phone,
+            address_line: state.profile.address,
+            apartment: state.profile.apartment,
+            delivery_note: state.profile.note,
+            city: "Nairobi"
+          },
+          p_payment_method_type: payment.type,
+          p_payment_method_label: paymentName(payment),
+          p_promo_code: state.promoCode || null
+        });
+        if (error) throw error;
+        if (!order?.id) throw new Error("Supabase did not return the saved order.");
+
+        state.orders.unshift({
+          id: order.id,
+          orderNumber: order.order_number,
+          createdAt: order.placed_at,
+          store: store?.name || "The Fast Dine",
+          items: state.cart.map(item => ({ ...item })),
+          total: order.total_kes,
+          status: order.status,
+          address: state.profile.address,
+          paymentMethod: paymentName(payment),
+          persisted: true
+        });
+        state.cart = [];
+        save();
+        state.modal = "placed";
+        render();
+        void refreshCustomerOrders().catch(refreshError => {
+          console.error("Order was saved, but order history could not be refreshed:", refreshError);
+        });
+      } catch (error) {
+        console.error("Could not save the Fast Dine order:", error);
+        toast(error.message || "We couldn't save your order. Your basket is still here; please try again.");
+      } finally {
+        state.submittingOrder = false;
+        render();
+      }
+    })();
+    return;
+  }
+
   const fee = store?.fee ?? 79;
-  const order = { id: `FD-${Date.now().toString().slice(-6)}`, createdAt: new Date().toISOString(), store: store?.name || "The Fast Dine", items: state.cart.map(item => ({ ...item })), total: subtotal() + fee + 25 - promoDiscount(), status: "Demo order", address: state.profile.address, paymentMethod: paymentName(payment), promoCode: state.promoCode || "" };
+  const order = { id: `FD-${Date.now().toString().slice(-6)}`, createdAt: new Date().toISOString(), store: store?.name || "The Fast Dine", items: state.cart.map(item => ({ ...item })), total: subtotal() + fee + 25 - promoDiscount(), status: "Demo order", address: state.profile.address, paymentMethod: paymentName(payment), promoCode: state.promoCode || "", persisted: false };
   state.orders.unshift(order); state.cart = []; save(); state.modal = "placed"; render();
 }
 

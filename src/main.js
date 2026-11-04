@@ -344,6 +344,8 @@ let autocompleteTimer;
 let autocompleteRequestId = 0;
 const state = {
   cart: read("tamu-cart", []),
+  checkoutStep: 1,
+  checkoutTermsAccepted: false,
   orders: supabaseConfigured ? [] : read("tamu-orders", []),
   submittingOrder: false,
   profile: storedProfile,
@@ -608,6 +610,10 @@ function navigate(path) {
   state.modal = null;
   state.storeOpen = null;
   state.cartOpen = false;
+  if (path.endsWith("/order-summary") && currentPath() !== path) {
+    state.checkoutStep = 1;
+    state.checkoutTermsAccepted = false;
+  }
   if (currentPath() !== path) history.pushState({}, "", path);
   window.scrollTo({ top: 0, behavior: "smooth" });
   render();
@@ -1230,20 +1236,47 @@ function checkoutPage() {
   const discount = promoDiscount();
   const total = subtotal() + fee + serviceFee - discount;
   const activePayment = selectedPayment();
-  const methods = state.payments.map(method => {
-    const details = method.type === "mpesa"
-      ? method.phone ? `Payment request sent to the number ending ${method.phone.replace(/\D/g, "").slice(-3)} after order confirmation.` : "Add a mobile number to receive an M-Pesa payment prompt."
-      : method.type === "card"
-        ? method.last4 ? `${method.brand} ending ${method.last4}. Card details are not stored in this preview.` : `${method.brand} option. Add and process cards only through a secure payment provider.`
-        : "Pay the delivery person in cash when your order arrives.";
-    const markClass = method.type === "mpesa" ? "mpesa" : method.type === "cash" ? "cash-mark" : "card-mark";
-    return `<label class="checkout-payment ${activePayment?.id === method.id ? "selected" : ""}"><input type="radio" name="checkout-payment" value="${escapeAttr(method.id)}" ${activePayment?.id === method.id ? "checked" : ""}><span class="payment-mark ${markClass}">${paymentIcon(method)}</span><span class="checkout-payment-copy"><b>${escapeHtml(paymentName(method))}${method.isDefault ? `<em>Preferred</em>` : ""}</b><small>${escapeHtml(details)}</small></span><span class="checkout-payment-check" aria-hidden="true">✓</span></label>`;
-  }).join("");
   const store = stores.find(item => item.id === state.cart[0]?.store);
   const itemCountLabel = `${cartQty()} ${cartQty() === 1 ? "item" : "items"}`;
-  return `<main class="checkout-page"><div class="breadcrumbs"><button data-route="${BASE}">Home</button><span>›</span><b>Checkout</b></div><div class="checkout-title"><div><p class="eyebrow">REVIEW YOUR ORDER</p><h1>Checkout</h1><p>Confirm your delivery and payment details before placing your order.</p></div><span class="checkout-step"><i>1</i> Your details <b>—</b> <i class="current">2</i> Review & pay</span></div><div class="checkout-layout"><section class="checkout-main"><div class="checkout-card delivery-checkout-card"><div class="card-heading"><div><span class="step-icon">⌖</span><div><h2>Delivery address</h2><p>Where should we bring your order?</p></div></div><button data-action="address">Change</button></div><div class="delivery-address"><span class="delivery-address-label">DELIVERING TO</span><b>${escapeHtml(state.profile.address || "Add a delivery address")}</b>${state.profile.apartment ? `<span>${escapeHtml(state.profile.apartment)}</span>` : ""}${state.profile.phone ? `<span class="delivery-contact">Contact: ${escapeHtml(state.profile.phone)}</span>` : ""}<small><i>●</i> Estimated delivery · 25–40 min</small></div><button class="add-instructions" data-action="instructions">${state.profile.note ? "✎ Edit delivery instructions" : "＋ Add delivery instructions"}</button>${state.profile.note ? `<p class="delivery-note">${escapeHtml(state.profile.note)}</p>` : ""}</div><div class="checkout-card payment-checkout-card"><div class="card-heading"><div><span class="step-icon">▤</span><div><h2>Payment method</h2><p>Choose how you’d like to pay for this order.</p></div></div><button data-route="/en/profile/account/payment-methods">Manage</button></div><div class="checkout-payments">${methods || `<div class="no-payment"><p>No payment methods added yet.</p><button data-action="add-payment-method">Add a payment method <span>→</span></button></div>`}</div>${state.payments.length ? `<button class="checkout-add-payment" data-action="add-payment-method">＋ Add another payment method</button>` : ""}<p class="checkout-payment-note"><span>🔒</span> Payment details stay protected. This storefront preview does not process payments or store full card details, security codes or M-Pesa PINs.</p></div><div class="checkout-card basket-checkout-card"><div class="card-heading"><div><span class="step-icon">🛍️</span><div><h2>Your items <small>${itemCountLabel}</small></h2><p>${store ? `From ${escapeHtml(store.name)} · ${store.time} delivery` : "Review items and quantities in your order."}</p></div></div><button data-route="${BASE}">Add items</button></div>${state.cart.length ? `<div class="checkout-items">${state.cart.map(item => { const product = productInfo(item.id, item.store); return `<div class="checkout-item"><img src="${product?.image || ""}" alt="${escapeAttr(item.name)}" loading="lazy"><div><b>${escapeHtml(item.name)}</b><small>${money(item.price)} each</small><div class="quantity-control"><button data-qty="${escapeAttr(item.id)}" data-delta="-1" aria-label="Remove one ${escapeAttr(item.name)}" ${state.submittingOrder ? "disabled" : ""}>−</button><span>${item.qty}</span><button data-qty="${escapeAttr(item.id)}" data-delta="1" aria-label="Add one ${escapeAttr(item.name)}" ${state.submittingOrder ? "disabled" : ""}>＋</button></div></div><strong>${money(item.qty * item.price)}</strong></div>`; }).join("")}</div>` : `<div class="empty-basket-inline"><span>🧺</span><p>Your basket is empty. Add a local favourite before checkout.</p><button data-route="${BASE}">Explore restaurants <span>→</span></button></div>`}</div></section><aside class="checkout-summary"><div class="summary-sticky"><p class="eyebrow">ORDER TOTAL</p><h2>Price details</h2><div class="summary-line"><span>Items <small>${itemCountLabel}</small></span><b>${money(subtotal())}</b></div><div class="summary-line"><span>Delivery fee <small>${store?.name ? `From ${escapeHtml(store.name)}` : "Local delivery"}</small></span><b>${money(fee)}</b></div><div class="summary-line"><span>Service fee <small>Order handling</small></span><b>${money(serviceFee)}</b></div>${discount ? `<div class="summary-line promo-discount"><span>${escapeHtml(state.promoCode)} discount</span><b>−${money(discount)}</b></div>` : ""}<button class="promo-button" data-route="/en/profile/account/promo-codes">${state.promoCode ? `${escapeHtml(state.promoCode)} applied · Manage promo` : "＋ Add a promo code"}</button><div class="summary-total"><span>Total to pay <small>All listed charges included</small></span><strong>${money(total)}</strong></div><button class="button-dark place-order" data-action="place-order" ${!state.cart.length || !activePayment || state.submittingOrder ? "disabled" : ""}>${state.submittingOrder ? "Saving order…" : "Place order"} <span>→</span></button><p class="checkout-terms">Orders require sign-in and are saved to your Fast Dine account. No payment or delivery is triggered.</p></div><div class="checkout-help"><span>♡</span><div><b>Need a hand?</b><small>Questions about your order? <a href="mailto:hello@fastdine.example">Contact support</a></small></div></div></aside></div>${footer()}</main>`;
+  const steps = ["Cart", "Delivery", "Payment", "Review"];
+  const progress = steps.map((title, index) => {
+    const number = index + 1;
+    const current = number === state.checkoutStep;
+    return `<button type="button" class="checkout-progress-step ${number < state.checkoutStep ? "complete" : ""} ${current ? "current" : ""}" data-checkout-step="${number}" aria-current="${current ? "step" : "false"}" ${number > state.checkoutStep || state.submittingOrder ? "disabled" : ""}><span>${number < state.checkoutStep ? "&#10003;" : number}</span><b>${title}</b><small>${["Your items", "Where to bring it", "How to pay", "Check your order"][index]}</small></button>`;
+  }).join("");
+  const cartItems = state.cart.map(item => {
+    const product = productInfo(item.id, item.store);
+    return `<article class="checkout-item"><img src="${product?.image || ""}" alt="${escapeAttr(item.name)}" loading="lazy"><div class="checkout-item-copy"><b>${escapeHtml(item.name)}</b><small>${money(item.price)} each</small><div class="quantity-control"><button type="button" data-qty="${escapeAttr(item.id)}" data-delta="-1" aria-label="Remove one ${escapeAttr(item.name)}">-</button><span>${item.qty}</span><button type="button" data-qty="${escapeAttr(item.id)}" data-delta="1" aria-label="Add one ${escapeAttr(item.name)}">+</button></div></div><strong>${money(item.price * item.qty)}</strong></article>`;
+  }).join("");
+  const reviewItems = state.cart.map(item => {
+    const product = productInfo(item.id, item.store);
+    return `<article class="checkout-item"><img src="${product?.image || ""}" alt="${escapeAttr(item.name)}" loading="lazy"><div class="checkout-item-copy"><b>${escapeHtml(item.name)}</b><small>Quantity: ${item.qty} &middot; ${money(item.price)} each</small></div><strong>${money(item.price * item.qty)}</strong></article>`;
+  }).join("");
+  const paymentOptions = state.payments.map(method => {
+    const details = method.type === "mpesa" ? (method.phone ? `M-Pesa number ending ${method.phone.replace(/\D/g, "").slice(-3)}` : "Mobile money") : method.type === "card" ? (method.last4 ? `${method.brand} ending ${method.last4}` : `${method.brand} preview option`) : "Pay in cash when your order arrives";
+    const mark = method.type === "mpesa" ? "mpesa" : method.type === "cash" ? "cash-mark" : "card-mark";
+    return `<label class="checkout-payment ${activePayment?.id === method.id ? "selected" : ""}"><input type="radio" name="checkout-payment" value="${escapeAttr(method.id)}" ${activePayment?.id === method.id ? "checked" : ""}><span class="payment-mark ${mark}">${paymentIcon(method)}</span><span class="checkout-payment-copy"><b>${escapeHtml(paymentName(method))}${method.isDefault ? "<em>Preferred</em>" : ""}</b><small>${escapeHtml(details)}</small></span><span class="checkout-payment-check" aria-hidden="true">&#10003;</span></label>`;
+  }).join("");
+  const deliverySummary = `<div class="review-detail"><span class="step-icon">&#8982;</span><div><b>${escapeHtml(state.profile.name || "Delivery contact")}</b><p>${escapeHtml(state.profile.address || "No delivery address added")}${state.profile.apartment ? `, ${escapeHtml(state.profile.apartment)}` : ""}</p><small>${escapeHtml(state.profile.email || "")}${state.profile.phone ? ` &middot; ${escapeHtml(state.profile.phone)}` : ""}</small>${state.profile.note ? `<small>Note: ${escapeHtml(state.profile.note)}</small>` : ""}</div><button type="button" data-checkout-step="2">Edit</button></div>`;
+  const paymentSummary = activePayment ? `<div class="review-detail"><span class="payment-mark ${activePayment.type === "mpesa" ? "mpesa" : activePayment.type === "cash" ? "cash-mark" : "card-mark"}">${paymentIcon(activePayment)}</span><div><b>${escapeHtml(paymentName(activePayment))}</b><p>${activePayment.type === "cash" ? "Pay when your order arrives." : "No payment is processed in this preview."}</p></div><button type="button" data-checkout-step="3">Edit</button></div>` : `<p class="checkout-empty-notice">Choose a payment method before reviewing your order.</p>`;
+  let content;
+  if (state.checkoutStep === 1) {
+    content = `<section class="checkout-stage-card"><div class="checkout-section-heading"><span class="step-icon">&#128722;</span><div><h2>Your basket</h2><p>${store ? `From ${escapeHtml(store.name)} &middot; ${store.time}` : "Review the items you have selected."}</p></div><button type="button" class="checkout-text-action" data-route="${BASE}">Add more</button></div>${state.cart.length ? `<div class="checkout-items">${cartItems}</div>` : `<div class="checkout-empty-state"><span>&#129523;</span><h3>Your basket is waiting.</h3><p>Explore Nairobi favourites and add something tasty before checkout.</p><button type="button" class="button-dark" data-route="${BASE}">Browse restaurants <span>&rarr;</span></button></div>`}</section>`;
+  } else if (state.checkoutStep === 2) {
+    content = `<section class="checkout-stage-card"><form id="checkout-delivery-form" class="checkout-delivery-form" data-form="checkout-delivery"><div class="checkout-section-heading"><span class="step-icon">&#8982;</span><div><h2>Delivery details</h2><p>Where should we bring your order?</p></div></div><div class="checkout-contact-fields"><label>Full name<input name="name" autocomplete="name" value="${escapeAttr(state.profile.name)}" placeholder="Your full name" required></label><label>Email address<input name="email" type="email" autocomplete="email" value="${escapeAttr(state.profile.email)}" placeholder="you@example.com" required></label><label>Phone number<input name="phone" type="tel" autocomplete="tel" value="${escapeAttr(state.profile.phone)}" placeholder="+254 7XX XXX XXX" required></label></div><div class="checkout-address-heading"><div><b>Delivery address</b><small>Choose a saved address, search, or pin your location.</small></div><button type="button" data-action="checkout-address">&#8982; Choose on map</button></div><label class="checkout-address-field">Street, area or landmark<input name="address" autocomplete="street-address" value="${escapeAttr(state.profile.address)}" placeholder="Street, neighbourhood, Nairobi" required></label><label class="checkout-address-field">Apartment or building <span class="optional">OPTIONAL</span><input name="apartment" value="${escapeAttr(state.profile.apartment)}" placeholder="Apartment, floor or unit"></label><label class="checkout-address-field">Delivery instructions <span class="optional">OPTIONAL</span><textarea name="note" rows="3" placeholder="Gate code, landmark or directions for the courier">${escapeHtml(state.profile.note)}</textarea></label><p class="checkout-safe-note">Your address will be attached to this order.</p></form></section>`;
+  } else if (state.checkoutStep === 3) {
+    content = `<section class="checkout-stage-card"><div class="checkout-section-heading"><span class="step-icon">&#8982;</span><div><h2>Choose payment</h2><p>Select how you would like to pay for your order.</p></div></div><div class="checkout-selected-address">${deliverySummary}</div><div class="checkout-payments">${paymentOptions}</div><button type="button" class="checkout-add-payment" data-action="add-payment-method">&#43; Add a payment method</button><p class="checkout-safe-note">This preview does not process payments. Never enter your card security code, M-Pesa PIN or one-time password here.</p></section>`;
+  } else {
+    content = `<section class="checkout-stage-card checkout-review-stage"><div class="checkout-section-heading"><span class="step-icon">&#8982;</span><div><h2>Review your order</h2><p>Check your delivery details and items before placing your order.</p></div></div><div class="checkout-review-group"><div><h3>Delivery</h3>${deliverySummary}</div><div><h3>Payment</h3>${paymentSummary}</div></div><div class="checkout-review-items"><div class="checkout-review-items-heading"><h3>Your items <small>${itemCountLabel}</small></h3><button type="button" data-checkout-step="1">Edit cart</button></div>${state.cart.length ? reviewItems : `<p class="checkout-empty-notice">Your basket is empty.</p>`}</div><label class="checkout-terms-confirm"><input id="checkout-terms" type="checkbox" ${state.checkoutTermsAccepted ? "checked" : ""}><span>I confirm my delivery details are correct and understand payment is not processed on this page.</span></label><p class="checkout-safe-note">Placing your order saves it to your Fast Dine account. Payment is not processed by this page.</p></section>`;
+  }
+  let action;
+  if (state.checkoutStep === 1) action = `<button type="button" class="button-dark checkout-primary-action" data-action="checkout-continue" ${state.cart.length ? "" : "disabled"}>Continue to delivery <span>&rarr;</span></button>`;
+  else if (state.checkoutStep === 2) action = `<button type="submit" form="checkout-delivery-form" class="button-dark checkout-primary-action">Continue to payment <span>&rarr;</span></button>`;
+  else if (state.checkoutStep === 3) action = `<button type="button" class="button-dark checkout-primary-action" data-action="checkout-continue" ${activePayment ? "" : "disabled"}>Review order <span>&rarr;</span></button>`;
+  else action = `<button type="button" class="button-dark checkout-primary-action" data-action="place-order" ${state.cart.length && activePayment && state.checkoutTermsAccepted && !state.submittingOrder ? "" : "disabled"}>${state.submittingOrder ? "Saving order..." : "Place order"} <span>&rarr;</span></button>`;
+  const back = state.checkoutStep > 1 ? `<button type="button" class="checkout-back-action" data-action="checkout-back">&larr; Back to ${steps[state.checkoutStep - 2]}</button>` : `<button type="button" class="checkout-back-action" data-route="${BASE}">&larr; Continue shopping</button>`;
+  return `<main class="checkout-page"><div class="breadcrumbs"><button data-route="${BASE}">Home</button><span>&rsaquo;</span><b>Checkout</b></div><div class="checkout-title"><div><p class="eyebrow">SECURE CHECKOUT</p><h1>${steps[state.checkoutStep - 1]}</h1><p>${["Your items", "Where to bring it", "How to pay", "Check your order"][state.checkoutStep - 1]} &middot; ${itemCountLabel}</p></div><span class="checkout-lock">&#128274; Your details stay protected</span></div><nav class="checkout-progress" aria-label="Checkout progress">${progress}</nav><div class="checkout-layout"><section class="checkout-main">${content}<div class="checkout-stage-footer">${back}</div></section><aside class="checkout-summary"><div class="summary-sticky"><p class="eyebrow">ORDER SUMMARY</p><h2>${itemCountLabel}</h2><div class="checkout-summary-items">${state.cart.map(item => `<div><span>${item.qty} &times; ${escapeHtml(item.name)}</span><b>${money(item.price * item.qty)}</b></div>`).join("") || "<p>Your items will appear here.</p>"}</div><div class="summary-line"><span>Subtotal</span><b>${money(subtotal())}</b></div><div class="summary-line"><span>Delivery <small>${store?.name ? `From ${escapeHtml(store.name)}` : "Local delivery"}</small></span><b>${money(fee)}</b></div><div class="summary-line"><span>Service fee</span><b>${money(serviceFee)}</b></div>${discount ? `<div class="summary-line promo-discount"><span>${escapeHtml(state.promoCode)} discount</span><b>&minus;${money(discount)}</b></div>` : ""}<button type="button" class="promo-button" data-route="/en/profile/account/promo-codes">${state.promoCode ? `${escapeHtml(state.promoCode)} applied &middot; Manage promo` : "+ Add a promo code"}</button><div class="summary-total"><span>Total to pay</span><strong>${money(total)}</strong></div>${action}<p class="checkout-terms">Your order is saved to your account. Payment is not processed by this checkout.</p></div><div class="checkout-help"><span>&#9825;</span><div><b>Need a hand?</b><small>Questions about your order? <a href="mailto:hello@fastdine.example">Contact support</a></small></div></aside></div>${footer()}</main>`;
 }
-
 function renderOverlay() {
   const root = document.querySelector("#overlay-root");
   if (state.modal === "support") { root.innerHTML = supportModalContent(); return; }
@@ -1421,7 +1454,36 @@ function updateQty(id, delta) {
   save(); render();
 }
 
+function advanceCheckout() {
+  if (state.submittingOrder) return;
+  if (state.checkoutStep === 1) {
+    if (!state.cart.length) {
+      toast("Add a little something to your basket first.");
+      return;
+    }
+    state.checkoutStep = 2;
+  } else if (state.checkoutStep === 3) {
+    if (!selectedPayment()) {
+      toast("Choose a payment method to continue.");
+      return;
+    }
+    state.checkoutStep = 4;
+  }
+  render();
+}
+
+function goToCheckoutStep(step) {
+  if (state.submittingOrder || !Number.isInteger(step) || step < 1 || step > 4) return;
+  if (step > state.checkoutStep) return;
+  state.checkoutStep = step;
+  render();
+}
+
 function submitOrder() {
+  if (state.checkoutStep !== 4 || !state.checkoutTermsAccepted) {
+    toast("Review your order and confirm your delivery details before placing it.");
+    return;
+  }
   if (!state.cart.length) { toast("Add a little something to your basket first."); return; }
   if (!state.profile.address) { state.modal = "address"; renderOverlay(); return; }
   const payment = selectedPayment();
@@ -1526,6 +1588,8 @@ function removePaymentMethod(id) {
 document.addEventListener("click", event => {
   const route = event.target.closest("[data-route]");
   if (route) { event.preventDefault(); navigate(route.dataset.route); return; }
+  const checkoutStep = event.target.closest("[data-checkout-step]");
+  if (checkoutStep) { goToCheckoutStep(Number(checkoutStep.dataset.checkoutStep)); return; }
   const placeholderSupportLink = event.target.closest('a[href="mailto:hello@fastdine.example"]');
   if (placeholderSupportLink) {
     event.preventDefault();
@@ -1586,6 +1650,22 @@ document.addEventListener("click", event => {
   const action = event.target.closest("[data-action]")?.dataset.action;
   if (action === "cart") { state.cartOpen = !state.cartOpen; state.storeOpen = null; state.modal = null; renderOverlay(); }
   else if (action === "address") { openDeliveryLocation(); }
+  else if (action === "checkout-address") {
+    const form = document.querySelector("#checkout-delivery-form");
+    if (form) {
+      const data = new FormData(form);
+      state.profile.name = String(data.get("name") || "").trim();
+      state.profile.email = String(data.get("email") || "").trim();
+      state.profile.phone = String(data.get("phone") || "").trim();
+      state.profile.address = String(data.get("address") || "").trim();
+      state.profile.apartment = String(data.get("apartment") || "").trim();
+      state.profile.note = String(data.get("note") || "").trim();
+      save();
+    }
+    openDeliveryLocation();
+  }
+  else if (action === "checkout-continue") advanceCheckout()
+  else if (action === "checkout-back") goToCheckoutStep(state.checkoutStep - 1)
   else if (action === "login") { navigate("/en/login?returnPath=%2Fen%2Fke%2Fnairobi"); }
   else if (action === "search") { state.modal = "search"; renderOverlay(); setTimeout(() => document.querySelector("#modal-search")?.focus(), 20); }
   else if (action === "help") { state.supportTopic = null; state.supportError = ""; state.modal = "support"; renderOverlay(); }
@@ -1674,6 +1754,10 @@ document.addEventListener("change", event => {
     save();
     document.querySelectorAll(".checkout-payment").forEach(option => option.classList.toggle("selected", option.contains(event.target)));
   }
+  if (event.target.matches("#checkout-terms")) {
+    state.checkoutTermsAccepted = event.target.checked;
+    render();
+  }
   if (event.target.matches("[data-privacy]")) { state.privacy[event.target.dataset.privacy] = event.target.checked; save(); toast("Privacy preference saved"); }
   if (event.target.id === "sort-select") {
     const grid = document.querySelector("#listing-stores");
@@ -1691,7 +1775,24 @@ document.addEventListener("submit", async event => {
   if (!kind) return;
   event.preventDefault();
   const data = new FormData(form);
-  if (kind === "support-chat") {
+  if (kind === "checkout-delivery") {
+    const profile = {
+      name: String(data.get("name") || "").trim(),
+      email: String(data.get("email") || "").trim(),
+      phone: String(data.get("phone") || "").trim(),
+      address: String(data.get("address") || "").trim(),
+      apartment: String(data.get("apartment") || "").trim(),
+      note: String(data.get("note") || "").trim()
+    };
+    if (!profile.name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email) || !profile.phone || !profile.address) {
+      toast("Enter your name, a valid email, phone number and delivery address to continue.");
+      return;
+    }
+    Object.assign(state.profile, profile);
+    state.checkoutStep = 3;
+    save();
+    render();
+  } else if (kind === "support-chat") {
     const question = String(data.get("question") || "").trim();
     if (question) askSupportAssistant(question);
   } else if (kind === "support-request") {

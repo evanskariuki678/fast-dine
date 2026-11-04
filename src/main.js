@@ -1,12 +1,15 @@
 import { supabase, supabaseConfigured } from "./supabase.js";
+import { retailProductEntries } from "./retailCatalog.js";
 
 const BASE = "/en/ke/nairobi";
+const SUPPORT_EMAIL = (import.meta.env.VITE_SUPPORT_EMAIL || "").trim();
+const GEOAPIFY_API_KEY = (import.meta.env.VITE_GEOAPIFY_API_KEY || "").trim();
 const image = (id, width = 900) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${width}&q=85`;
 
 const categories = [
-  { id: "food", title: "Food", icon: "🍔", tone: "peach", path: `${BASE}/categories/food_1`, subtitle: "Meals worth staying in for" },
-  { id: "groceries", title: "Groceries", icon: "🥑", tone: "mint", path: `${BASE}/categories/groceries_4`, subtitle: "The everyday, delivered" },
-  { id: "pharmacy", title: "Pharmacy & Beauty", icon: "🧴", tone: "lilac", path: `${BASE}/categories/pharmacy-beauty_3`, subtitle: "A little care, right on time" },
+  { id: "food", title: "Food", icon: "🍔", tone: "palette-food", path: `${BASE}/categories/food_1`, subtitle: "Meals worth staying in for" },
+  { id: "groceries", title: "Groceries", icon: "🥑", tone: "palette-groceries", path: `${BASE}/categories/groceries_4`, subtitle: "The everyday, delivered" },
+  { id: "pharmacy", title: "Pharmacy & Beauty", icon: "🧴", tone: "palette-pharmacy", path: `${BASE}/categories/pharmacy-beauty_3`, subtitle: "A little care, right on time" },
   { id: "shops", title: "Shops", icon: "🎁", tone: "sky", path: `${BASE}/categories/shops_22`, subtitle: "Find a little something" },
   { id: "deals", title: "Fast Dine Deals", icon: "✨", tone: "butter", path: `${BASE}/stores/glovo-bargains-nbo`, subtitle: "Good finds at lovely prices" },
   { id: "alcohol", title: "Drinks", icon: "🍷", tone: "rose", path: `${BASE}/categories/alcohol_21655`, subtitle: "Raise a glass, delivered" }
@@ -19,11 +22,14 @@ const stores = [
   { id: "artcaffe", slug: "artcaffe", name: "Artcaffé", category: "food", cuisine: "Cafe · Bakery · Brunch", rating: "4.7", count: "890+", time: "25–35 min", fee: 59, promo: "Cafe favourites", badge: "Freshly baked", image: image("photo-1509440159596-0249088772ff"), color: "#875c48", description: "Cafe classics, fresh bakes and all-day brunch favourites." },
   { id: "creamy-inn", slug: "creamy-inn", name: "Creamy Inn", category: "food", cuisine: "Ice cream · Desserts · Shakes", rating: "4.6", count: "620+", time: "20–30 min", fee: 49, promo: "Sweet treats", badge: "Made for treats", image: image("photo-1563805042-7684c019e1cb"), color: "#bd7391", description: "Ice cream, sundaes and cool treats for any kind of day." },
   { id: "avon-bitez-nbo", slug: "avon-bitez-nbo", name: "Avon Bitez", category: "food", cuisine: "Fast food · Burgers · Chicken", rating: "4.6", count: "430+", time: "25–35 min", fee: 49, promo: "Quick bites", badge: "Good value", image: image("photo-1568901346375-23c9450c58cd"), color: "#a24c24", description: "Burgers, crispy bites and easy-going meal combos." },
-  { id: "carrefour", name: "Carrefour Market", category: "groceries", cuisine: "Groceries · Fresh produce", rating: "4.8", count: "2k+", time: "25–40 min", fee: 99, promo: "Save on essentials", badge: "Wide selection", image: image("photo-1542838132-92c53300491e"), color: "#4d8d64", description: "Fresh picks and pantry staples for your week." },
-  { id: "naivas", name: "Naivas Foodmarket", category: "groceries", cuisine: "Groceries · Household", rating: "4.7", count: "1.6k+", time: "30–45 min", fee: 89, promo: "Weekly offers", badge: "Nearby", image: image("photo-1543168256-418811576931"), color: "#4e8c52", description: "Everything on your list, in one easy order." },
-  { id: "fresh-basket", name: "Fresh Basket", category: "groceries", cuisine: "Fruit · Veg · Bakery", rating: "4.9", count: "320+", time: "20–30 min", fee: 69, promo: "Fresh today", badge: "Farm fresh", image: image("photo-1540420773420-3366772f4999"), color: "#8a9a45", description: "Seasonal produce picked with care." },
-  { id: "goodlife", name: "Goodlife Pharmacy", category: "pharmacy", cuisine: "Pharmacy · Wellness", rating: "4.9", count: "420+", time: "20–35 min", fee: 89, promo: "Care essentials", badge: "Trusted", image: image("photo-1607619056574-7b8d3ee536b2"), color: "#689b82", description: "Everyday wellness and personal care essentials." },
-  { id: "glam", name: "Glow & Go Beauty", category: "pharmacy", cuisine: "Skincare · Beauty", rating: "4.8", count: "210+", time: "25–40 min", fee: 79, promo: "Beauty edit", badge: "Trending", image: image("photo-1596462502278-27bfdc403348"), color: "#ba849d", description: "Find your next favourite in skincare and beauty." },
+  { id: "carrefour", slug: "carrefour-supermarket-nbo-ke", name: "Carrefour Supermarket", category: "groceries", cuisine: "Supermarket · Pantry · Fresh produce · Dairy · Bakery · Household", rating: "4.8", count: "2k+", time: "25–40 min", fee: 99, promo: "Save on essentials", badge: "Wide selection", image: image("photo-1542838132-92c53300491e"), color: "#4d8d64", description: "Stock up for the week with fresh produce, everyday pantry staples, chilled favourites and home essentials." },
+  { id: "naivas", slug: "naivas-nbo", name: "Naivas Foodmarket", category: "groceries", cuisine: "Supermarket · Pantry · Fresh produce · Dairy · Bakery · Household", rating: "4.7", count: "1.6k+", time: "30–45 min", fee: 89, promo: "Weekly offers", badge: "Nearby", image: image("photo-1543168256-418811576931"), color: "#4e8c52", description: "A handy neighbourhood shop for Kenyan kitchen staples, fresh ingredients and everyday household picks." },
+  { id: "quickmart", slug: "quickmart-nbo", name: "Quickmart", category: "groceries", cuisine: "Supermarket · Pantry · Fresh produce · Dairy · Bakery · Household", rating: "4.7", count: "1.1k+", time: "25–40 min", fee: 89, promo: "Daily essentials", badge: "Good value", image: image("photo-1542838132-92c53300491e"), color: "#c33b35", description: "Top up the fridge and pantry with fresh foods, family favourites and useful household basics." },
+  { id: "fruitsdoor-market", slug: "fruitsdoor-market-nbo", name: "Fruitsdoor Market", category: "groceries", cuisine: "Fruit · Vegetables · Fresh produce · Herbs · Farm market", rating: "4.8", count: "640+", time: "20–30 min", fee: 69, promo: "Fresh market picks", badge: "Picked fresh", image: image("photo-1540420773420-3366772f4999"), color: "#729346", description: "Bright seasonal fruit, crisp vegetables and fresh market ingredients for everyday meals." },
+  { id: "cleanshelf", slug: "cleanshelf-nbo", name: "Cleanshelf", category: "groceries", cuisine: "Supermarket · Household · Cleaning · Pantry · Personal care", rating: "4.6", count: "510+", time: "25–40 min", fee: 79, promo: "Home essentials", badge: "Home & pantry", image: image("photo-1604719312566-8912e9c8a213"), color: "#528178", description: "Keep your home stocked with cleaning supplies, personal care and handy pantry essentials." },
+  { id: "goodlife", slug: "goodlife-pharmacy-sarit", name: "Goodlife Pharmacy Sarit", category: "pharmacy", cuisine: "Pharmacy · Wellness · Personal care · First aid", rating: "4.9", count: "420+", time: "20–35 min", fee: 89, promo: "Care essentials", badge: "Trusted", image: image("photo-1607619056574-7b8d3ee536b2"), color: "#689b82", description: "Everyday wellness and personal care essentials, with pharmacy support when you need guidance." },
+  { id: "nivea", slug: "nivea-nbo", name: "NIVEA", category: "pharmacy", cuisine: "Beauty · Skin care · Body care · Personal care", rating: "4.8", count: "390+", time: "20–35 min", fee: 69, promo: "Everyday skin care", badge: "Skin care", image: image("photo-1556229010-6c3f2c9ca5f8"), color: "#28609b", description: "A considered selection of daily face, body and sun-care essentials for the whole family." },
+  { id: "pharma-plus", slug: "pharma-plus-nrbo", name: "Pharma Plus", category: "pharmacy", cuisine: "Pharmacy · Wellness · First aid · Personal care", rating: "4.7", count: "280+", time: "25–40 min", fee: 79, promo: "Wellness picks", badge: "Care nearby", image: image("photo-1576602976047-174e57a47881"), color: "#418a80", description: "A neighbourhood pharmacy selection of wellness, hygiene and first-aid essentials." },
   { id: "flower-shop", name: "Petal & Stem", category: "shops", cuisine: "Flowers · Gifts", rating: "4.9", count: "180+", time: "30–45 min", fee: 99, promo: "Make their day", badge: "Made with love", image: image("photo-1490750967868-88aa4486c946"), color: "#b36f82", description: "Thoughtful flowers and gifts for every little moment." },
   { id: "miniso", name: "Little Finds", category: "shops", cuisine: "Home · Gifts · Everyday", rating: "4.7", count: "300+", time: "25–40 min", fee: 89, promo: "Nice little things", badge: "Worth a look", image: image("photo-1602143407151-7111542de6e8"), color: "#7d93a5", description: "Useful, cheerful things for your home and day." },
   { id: "tamu-deals", name: "Fast Dine Deals Market", category: "deals", cuisine: "Deals · Pantry · Fresh", rating: "4.8", count: "1k+", time: "20–35 min", fee: 49, promo: "Up to 40% off", badge: "Today only", image: image("photo-1542838132-92c53300491e"), color: "#718e55", description: "A rotating edit of everyday favourites at better prices." },
@@ -41,6 +47,21 @@ function createFoodMenu(prefix, entries, photos) {
     ...(tag ? { tag } : {})
   }));
 }
+
+const retailProducts = Object.fromEntries(
+  Object.entries(retailProductEntries).map(([storeId, entries]) => [
+    storeId,
+    entries.map(([id, name, description, price, oldPrice, photoId, tag]) => ({
+      id,
+      name,
+      description,
+      price,
+      ...(oldPrice ? { oldPrice } : {}),
+      image: image(photoId, 480),
+      ...(tag ? { tag } : {})
+    }))
+  ])
+);
 
 const productsByStore = {
   galitos: createFoodMenu("g", [
@@ -251,32 +272,7 @@ const productsByStore = {
     { id: "b2", name: "Crispy Chicken Burger", description: "Crunchy chicken, slaw and a little spicy mayo.", price: 680, image: image("photo-1606755962773-d324e0a13086", 480) },
     { id: "b3", name: "Skin-on Fries", description: "Golden fries with our house seasoning.", price: 280, image: image("photo-1573080496219-bb080dd4f877", 480) }
   ],
-  carrefour: [
-    { id: "c1", name: "Seasonal Fruit Box", description: "A fresh mix of the week's best fruit.", price: 780, image: image("photo-1610832958506-aa56368176cf", 480), tag: "Fresh pick" },
-    { id: "c2", name: "Farm Fresh Eggs (Tray)", description: "Thirty free-range eggs from local farms.", price: 790, image: image("photo-1506976785307-8732e854ad03", 480) },
-    { id: "c3", name: "Avocado (3 pieces)", description: "Creamy, ripe avocados selected for this week.", price: 180, image: image("photo-1523049673857-eb18f1d7b578", 480) },
-    { id: "c4", name: "Fresh Milk 1L", description: "Locally sourced whole milk.", price: 110, image: image("photo-1550583724-b2692b85b150", 480) }
-  ],
-  naivas: [
-    { id: "n1", name: "Weekly Essentials Bag", description: "A handy bundle of your everyday staples.", price: 1290, image: image("photo-1542838132-92c53300491e", 480), tag: "Great value" },
-    { id: "n2", name: "Fresh Tomatoes 1kg", description: "Ripe, juicy tomatoes for all your favourite meals.", price: 160, image: image("photo-1546094096-0df4bcaaa337", 480) },
-    { id: "n3", name: "Brown Bread", description: "Freshly baked wholemeal loaf.", price: 85, image: image("photo-1509440159596-0249088772ff", 480) }
-  ],
-  "fresh-basket": [
-    { id: "f1", name: "Greens & Goodness Box", description: "Spinach, kale, herbs and crisp seasonal greens.", price: 540, image: image("photo-1540420773420-3366772f4999", 480), tag: "Farm fresh" },
-    { id: "f2", name: "Mangoes (3 pieces)", description: "Sweet, fragrant mangoes, ready to enjoy.", price: 240, image: image("photo-1553279768-865429fa0078", 480) },
-    { id: "f3", name: "Carrots 1kg", description: "Sweet and crunchy, freshly harvested.", price: 130, image: image("photo-1445282768818-728615cc910a", 480) }
-  ],
-  goodlife: [
-    { id: "g1", name: "Everyday Wellness Kit", description: "A handy edit of daily care essentials.", price: 950, image: image("photo-1607619056574-7b8d3ee536b2", 480), tag: "Staff pick" },
-    { id: "g2", name: "Hydrating Hand Cream", description: "A rich, quick absorbing daily moisturiser.", price: 420, image: image("photo-1608248543803-ba4f8c70ae0b", 480) },
-    { id: "g3", name: "Vitamin C Gummies", description: "A bright citrus flavoured daily supplement.", price: 780, image: image("photo-1571781926291-c477ebfd024b", 480) }
-  ],
-  glam: [
-    { id: "gl1", name: "Daily Glow Set", description: "A gentle cleanser and daily moisturiser duo.", price: 1450, image: image("photo-1596462502278-27bfdc403348", 480), tag: "Beauty edit" },
-    { id: "gl2", name: "Everyday SPF 50", description: "Lightweight broad spectrum face sunscreen.", price: 1150, image: image("photo-1556229010-6c3f2c9ca5f8", 480) },
-    { id: "gl3", name: "Lip Care Duo", description: "Nourishing balms for soft, happy lips.", price: 560, image: image("photo-1586495777744-4413f21062fa", 480) }
-  ],
+  ...retailProducts,
   "flower-shop": [
     { id: "fl1", name: "Just Because Bouquet", description: "A bright seasonal bunch, wrapped with care.", price: 1850, image: image("photo-1490750967868-88aa4486c946", 480), tag: "Made with love" },
     { id: "fl2", name: "Sunshine Stems", description: "Cheerful golden blooms for a brighter day.", price: 1500, image: image("photo-1508610048659-a06b669e3321", 480) },
@@ -339,6 +335,13 @@ const storedAuthFlow = readSession("fastdine-auth-flow", {});
 const hasPendingAuthFlow = storedAuthFlow.pending === true && storedAuthFlow.method !== "phone";
 const initialRouteParams = new URLSearchParams(window.location.search);
 const storedProfile = read("tamu-profile", { name: "", email: "", phone: "", address: "Kilimani, Nairobi", apartment: "", note: "" });
+const initialSavedAddresses = read("tamu-delivery-addresses", []);
+let deliveryMap;
+let L;
+let deliveryMarker;
+let deliveryMapElement;
+let autocompleteTimer;
+let autocompleteRequestId = 0;
 const state = {
   cart: read("tamu-cart", []),
   orders: supabaseConfigured ? [] : read("tamu-orders", []),
@@ -364,8 +367,35 @@ const state = {
   cartOpen: false,
   storeOpen: null,
   modal: null,
-  supportTopic: null
+  savedAddresses: Array.isArray(initialSavedAddresses) ? initialSavedAddresses : [],
+  selectedAddressId: "",
+  deliveryLocation: Number.isFinite(storedProfile.latitude) && Number.isFinite(storedProfile.longitude)
+    ? { latitude: storedProfile.latitude, longitude: storedProfile.longitude }
+    : null,
+  locationError: "",
+  locationStatus: "",
+  detectingLocation: false,
+  loadingAddresses: false,
+  supportTopic: null,
+  supportRequestTopic: "Something else",
+  supportRequests: read("tamu-support-requests", []),
+  supportConversation: [],
+  supportError: ""
 };
+if (!state.savedAddresses.length && storedProfile.address) {
+  state.savedAddresses.push({
+    id: `local-${crypto.randomUUID()}`,
+    label: "Home",
+    name: storedProfile.name || "",
+    phone: storedProfile.phone || "",
+    address: storedProfile.address,
+    apartment: storedProfile.apartment || "",
+    note: storedProfile.note || "",
+    latitude: storedProfile.latitude ?? null,
+    longitude: storedProfile.longitude ?? null,
+    isDefault: true
+  });
+}
 
 const money = amount => `KSh ${Number(amount).toLocaleString("en-KE")}`;
 const paymentIcon = method => method.type === "mpesa" ? "M" : method.type === "card" ? method.brand === "American Express" ? "AMEX" : method.brand === "Mastercard" ? "MC" : "VISA" : "💵";
@@ -383,6 +413,10 @@ const save = () => {
   localStorage.setItem("tamu-promo-code", JSON.stringify(state.promoCode));
   localStorage.setItem("tamu-privacy", JSON.stringify(state.privacy));
   localStorage.setItem("fastdine-signed-in", JSON.stringify(state.signedIn));
+  localStorage.setItem("tamu-support-requests", JSON.stringify(state.supportRequests));
+  if (!supabaseConfigured || !state.signedIn) {
+    localStorage.setItem("tamu-delivery-addresses", JSON.stringify(state.savedAddresses));
+  }
 };
 const saveAuthFlow = () => sessionStorage.setItem("fastdine-auth-flow", JSON.stringify({ pending: true, mode: state.authMode, method: "email", identity: state.authIdentity, draft: state.authDraft }));
 const clearAuthFlow = () => sessionStorage.removeItem("fastdine-auth-flow");
@@ -512,6 +546,7 @@ async function handleAuthSession(event, session) {
   }
   if (!session?.user) {
     state.signedIn = false;
+    state.savedAddresses = read("tamu-delivery-addresses", []);
     save();
     if (currentPath() === "/en/auth/callback") {
       state.authError = "That sign-in link expired. Request a new code or link.";
@@ -529,6 +564,7 @@ async function handleAuthSession(event, session) {
     console.error("Could not load saved Fast Dine orders:", error);
     if (currentPath().startsWith("/en/profile")) toast("You're signed in, but your saved orders could not be loaded.");
   }
+  await refreshSavedAddresses();
   if (["INITIAL_SESSION", "SIGNED_IN"].includes(event) && currentPath() === "/en/auth/callback") {
     const destination = loginReturnPath();
     clearAuthFlow();
@@ -557,6 +593,7 @@ async function signOutCustomer() {
   state.profile.email = "";
   state.profile.phone = "";
   state.signedIn = false;
+  state.savedAddresses = read("tamu-delivery-addresses", []);
   save();
   render();
   toast("You've signed out on this device");
@@ -565,7 +602,7 @@ async function signOutCustomer() {
 const cartQty = () => state.cart.reduce((sum, item) => sum + item.qty, 0);
 const subtotal = () => state.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
 const selectedStore = () => state.storeOpen ? stores.find(store => store.id === state.storeOpen) : null;
-const productInfo = id => Object.values(productsByStore).flat().find(product => product.id === id);
+const productInfo = (id, storeId) => (productsByStore[storeId] || []).find(product => product.id === id);
 
 function navigate(path) {
   state.modal = null;
@@ -574,6 +611,414 @@ function navigate(path) {
   if (currentPath() !== path) history.pushState({}, "", path);
   window.scrollTo({ top: 0, behavior: "smooth" });
   render();
+}
+
+function openDeliveryLocation() {
+  state.modal = "address";
+  state.locationError = "";
+  state.locationStatus = "";
+  const saved = state.savedAddresses.find(address =>
+    address.address === state.profile.address && address.apartment === state.profile.apartment
+  );
+  state.selectedAddressId = saved?.id || "";
+  renderOverlay();
+  renderLocationMessage();
+  void refreshSavedAddresses();
+}
+
+async function refreshSavedAddresses() {
+  if (!supabase || !state.signedIn) return;
+  state.loadingAddresses = true;
+  renderOverlay();
+  try {
+    const { data, error } = await supabase
+      .from("delivery_addresses")
+      .select("id,label,recipient_name,phone,address_line,apartment,delivery_note,city,latitude,longitude,is_default,created_at")
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    state.savedAddresses = (data || []).map(address => ({
+      id: address.id,
+      label: address.label || "Home",
+      name: address.recipient_name || "",
+      phone: address.phone || "",
+      address: address.address_line,
+      apartment: address.apartment || "",
+      note: address.delivery_note || "",
+      latitude: address.latitude == null ? null : Number(address.latitude),
+      longitude: address.longitude == null ? null : Number(address.longitude),
+      isDefault: Boolean(address.is_default)
+    }));
+    if (!state.selectedAddressId) {
+      state.selectedAddressId = state.savedAddresses.find(address =>
+        address.address === state.profile.address && address.apartment === state.profile.apartment
+      )?.id || "";
+    }
+    save();
+  } catch (error) {
+    console.error("Could not load saved delivery addresses:", error);
+    state.locationError = "Saved addresses could not be loaded. Check the Supabase delivery-address migration and try again.";
+  } finally {
+    state.loadingAddresses = false;
+    if (state.modal === "address") renderOverlay();
+  }
+}
+
+async function saveDeliveryAddress(address) {
+  if (supabaseConfigured && state.signedIn) {
+    if (!supabase) throw new Error("Saved addresses are unavailable because Supabase is not configured.");
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
+    if (!authData.user) throw new Error("Sign in again before saving this address to your account.");
+    const row = {
+      user_id: authData.user.id,
+      label: address.label,
+      recipient_name: address.name,
+      phone: address.phone,
+      address_line: address.address,
+      apartment: address.apartment,
+      delivery_note: address.note,
+      city: "Nairobi",
+      latitude: address.latitude,
+      longitude: address.longitude,
+      is_default: state.savedAddresses.length === 0 || state.savedAddresses.some(item => item.id === state.selectedAddressId && item.isDefault)
+    };
+    const query = state.selectedAddressId && !state.selectedAddressId.startsWith("local-")
+      ? supabase.from("delivery_addresses").update(row).eq("id", state.selectedAddressId).select().single()
+      : supabase.from("delivery_addresses").insert(row).select().single();
+    const { data, error } = await query;
+    if (error) throw error;
+    address.id = data.id;
+    address.isDefault = Boolean(data.is_default);
+  } else {
+    address.id = state.selectedAddressId || `local-${crypto.randomUUID()}`;
+    address.isDefault = state.savedAddresses.length === 0 || state.savedAddresses.some(item => item.id === state.selectedAddressId && item.isDefault);
+    state.savedAddresses = state.savedAddresses.filter(item => item.id !== address.id);
+    state.savedAddresses.unshift(address);
+    save();
+  }
+  state.savedAddresses = state.savedAddresses.filter(item => item.id !== address.id);
+  state.savedAddresses.unshift(address);
+  state.selectedAddressId = address.id;
+}
+
+async function deleteSavedAddress(id) {
+  try {
+    if (supabase && state.signedIn && !id.startsWith("local-")) {
+      const { error } = await supabase.from("delivery_addresses").delete().eq("id", id);
+      if (error) throw error;
+    }
+    const wasDefault = state.savedAddresses.find(address => address.id === id)?.isDefault;
+    const wasSelected = state.selectedAddressId === id;
+    state.savedAddresses = state.savedAddresses.filter(address => address.id !== id);
+    if (wasDefault && state.savedAddresses.length) {
+      state.savedAddresses[0].isDefault = true;
+      if (supabase && state.signedIn && !state.savedAddresses[0].id.startsWith("local-")) {
+        const { error } = await supabase.from("delivery_addresses")
+          .update({ is_default: true })
+          .eq("id", state.savedAddresses[0].id);
+        if (error) throw error;
+      }
+    }
+    if (wasSelected) {
+      state.selectedAddressId = "";
+      const nextAddress = state.savedAddresses.find(address => address.isDefault) || state.savedAddresses[0];
+      if (nextAddress) {
+        state.profile.address = nextAddress.address;
+        state.profile.apartment = nextAddress.apartment;
+        state.profile.latitude = nextAddress.latitude;
+        state.profile.longitude = nextAddress.longitude;
+        state.deliveryLocation = Number.isFinite(nextAddress.latitude) && Number.isFinite(nextAddress.longitude)
+          ? { latitude: nextAddress.latitude, longitude: nextAddress.longitude }
+          : null;
+      } else {
+        state.profile.address = "";
+        state.profile.apartment = "";
+        delete state.profile.latitude;
+        delete state.profile.longitude;
+        state.deliveryLocation = null;
+      }
+    }
+    save();
+    renderOverlay();
+    toast("Saved address removed.");
+  } catch (error) {
+    console.error("Could not remove saved delivery address:", error);
+    state.locationError = "We couldn't remove that saved address. Please try again.";
+    renderOverlay();
+  }
+}
+
+function chooseSavedAddress(id) {
+  const address = state.savedAddresses.find(item => item.id === id);
+  if (!address) return;
+  state.selectedAddressId = address.id;
+  state.profile.address = address.address;
+  state.profile.apartment = address.apartment;
+  state.profile.note = address.note;
+  state.profile.latitude = address.latitude;
+  state.profile.longitude = address.longitude;
+  state.deliveryLocation = Number.isFinite(address.latitude) && Number.isFinite(address.longitude)
+    ? { latitude: address.latitude, longitude: address.longitude }
+    : null;
+  save();
+  state.modal = null;
+  render();
+  toast(`${address.label || "Saved"} address selected for checkout.`);
+}
+
+function placeDeliveryMarker(latitude, longitude) {
+  if (!deliveryMap) return;
+  const point = [latitude, longitude];
+  if (!deliveryMarker) {
+    deliveryMarker = L.marker(point, { draggable: true, title: "Delivery location" })
+      .addTo(deliveryMap)
+      .on("dragend", () => {
+        const position = deliveryMarker.getLatLng();
+        void setDeliveryPoint(position.lat, position.lng, true);
+      });
+  } else {
+    deliveryMarker.setLatLng(point);
+  }
+}
+
+async function initGeoapifyDeliveryMap() {
+  const mapElement = document.querySelector("#delivery-map");
+  if (!mapElement || deliveryMapElement === mapElement) return;
+  deliveryMapElement = mapElement;
+  if (!GEOAPIFY_API_KEY) {
+    showMapUnavailable("Configure VITE_GEOAPIFY_API_KEY from your Geoapify project to display the map and search addresses.");
+    return;
+  }
+  try {
+    if (!mapElement.isConnected) return;
+    const [leafletModule] = await Promise.all([
+      import("leaflet"),
+      import("leaflet/dist/leaflet.css")
+    ]);
+    L = leafletModule.default;
+    deliveryMap?.remove();
+    deliveryMarker = undefined;
+    const initialPoint = state.deliveryLocation || { latitude: -1.286389, longitude: 36.817223 };
+    const map = L.map(mapElement).setView([initialPoint.latitude, initialPoint.longitude], state.deliveryLocation ? 17 : 12);
+    deliveryMap = map;
+    const tileLayer = L.tileLayer(`https://maps.geoapify.com/v1/tile/osm-carto/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(GEOAPIFY_API_KEY)}`, {
+      maxZoom: 20,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.geoapify.com/">Geoapify</a>'
+    }).addTo(map);
+    tileLayer.on("tileerror", () => {
+      state.locationError = "Map tiles could not load. Check your Geoapify API key, domain restrictions, and plan.";
+      renderLocationMessage();
+    });
+    if (state.deliveryLocation) {
+      placeDeliveryMarker(initialPoint.latitude, initialPoint.longitude);
+    }
+    map.on("click", event => {
+      void setDeliveryPoint(event.latlng.lat, event.latlng.lng, true);
+    });
+    const searchInput = document.querySelector("#delivery-place-search");
+    const suggestions = document.querySelector("#delivery-place-suggestions");
+    searchInput?.addEventListener("input", () => {
+      clearTimeout(autocompleteTimer);
+      const requestId = ++autocompleteRequestId;
+      const query = searchInput.value.trim();
+      if (!suggestions || query.length < 3) {
+        suggestions?.replaceChildren();
+        return;
+      }
+      autocompleteTimer = setTimeout(async () => {
+        try {
+          const url = new URL("https://api.geoapify.com/v1/geocode/autocomplete");
+          url.search = new URLSearchParams({
+            text: query,
+            filter: "countrycode:ke",
+            bias: "proximity:36.817223,-1.286389",
+            limit: "5",
+            apiKey: GEOAPIFY_API_KEY
+          });
+          const response = await fetch(url);
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.message || `Address search failed (${response.status}).`);
+          if (requestId !== autocompleteRequestId || !suggestions.isConnected) return;
+          suggestions.replaceChildren();
+          for (const feature of data.features || []) {
+            const properties = feature.properties;
+            const option = document.createElement("button");
+            option.type = "button";
+            option.className = "delivery-search-suggestion";
+            option.setAttribute("role", "option");
+            option.textContent = properties.formatted;
+            option.addEventListener("click", () => {
+              state.profile.address = properties.formatted;
+              const addressField = document.querySelector('input[name="address"]');
+              if (addressField) addressField.value = properties.formatted;
+              searchInput.value = properties.formatted;
+              suggestions.replaceChildren();
+              void setDeliveryPoint(Number(properties.lat), Number(properties.lon), false);
+            });
+            suggestions.append(option);
+          }
+        } catch (error) {
+          if (requestId !== autocompleteRequestId) return;
+          console.error("Could not search delivery addresses:", error);
+          state.locationError = "Address search failed. Check the Geoapify key or enter the address manually.";
+          renderLocationMessage();
+        }
+      }, 250);
+    });
+    searchInput?.addEventListener("blur", () => {
+      setTimeout(() => suggestions?.replaceChildren(), 150);
+    });
+    updateDeliveryMapCaption();
+    if (state.deliveryLocation && !state.profile.address) {
+      await reverseGeocodeDeliveryPoint(initialPoint.latitude, initialPoint.longitude);
+    }
+    setTimeout(() => map.invalidateSize(), 0);
+  } catch (error) {
+    console.error("Could not initialize the Geoapify map:", error);
+    state.locationError = "The map could not be loaded. Check the Geoapify API key and network connection.";
+    showMapUnavailable("Check the Geoapify API key and network connection.");
+    renderLocationMessage();
+  }
+}
+
+function renderLocationMessage() {
+  const error = document.querySelector("#location-error");
+  if (error) {
+    error.textContent = state.locationError;
+    error.hidden = !state.locationError;
+  }
+  const status = document.querySelector("#location-status");
+  if (status) {
+    status.textContent = state.locationStatus;
+    status.hidden = !state.locationStatus;
+  }
+}
+
+function updateLocationDetectionButton() {
+  const button = document.querySelector("[data-action='detect-location']");
+  if (!button) return;
+  button.disabled = state.detectingLocation;
+  button.textContent = state.detectingLocation ? "Finding your location…" : "⌖ Detect My Location";
+}
+
+function showMapUnavailable(message) {
+  const mapElement = document.querySelector("#delivery-map");
+  if (!mapElement) return;
+  const wrapper = document.createElement("div");
+  wrapper.className = "delivery-map-fallback";
+  const title = document.createElement("b");
+  title.textContent = state.deliveryLocation
+    ? `GPS point: ${state.deliveryLocation.latitude.toFixed(5)}, ${state.deliveryLocation.longitude.toFixed(5)}`
+    : "Map is unavailable";
+  const detail = document.createElement("small");
+  detail.textContent = message;
+  wrapper.append(title, detail);
+  mapElement.replaceChildren(wrapper);
+}
+
+function updateDeliveryMapCaption() {
+  const caption = document.querySelector("#delivery-map-caption");
+  if (!caption) return;
+  const point = state.deliveryLocation;
+  caption.textContent = point
+    ? `Pin: ${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)} · Move the pin to adjust the address.`
+    : "Search for an address or click the map to place a pin.";
+}
+
+async function setDeliveryPoint(latitude, longitude, reverseGeocode) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+  state.selectedAddressId = "";
+  state.deliveryLocation = { latitude, longitude };
+  state.locationError = "";
+  if (deliveryMap) {
+    deliveryMap.panTo([latitude, longitude]);
+    placeDeliveryMarker(latitude, longitude);
+  }
+  updateDeliveryMapCaption();
+  renderLocationMessage();
+  if (reverseGeocode) await reverseGeocodeDeliveryPoint(latitude, longitude);
+}
+
+async function reverseGeocodeDeliveryPoint(latitude, longitude) {
+  if (!GEOAPIFY_API_KEY) return;
+  try {
+    const url = new URL("https://api.geoapify.com/v1/geocode/reverse");
+    url.search = new URLSearchParams({
+      lat: String(latitude),
+      lon: String(longitude),
+      format: "json",
+      apiKey: GEOAPIFY_API_KEY
+    });
+    const response = await fetch(url);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Reverse geocoding failed.");
+    const address = data.results?.[0]?.formatted;
+    if (!address) throw new Error("Geoapify did not find an address for this pin.");
+    const addressField = document.querySelector('input[name="address"]');
+    if (addressField) addressField.value = address;
+    state.profile.address = address;
+    state.locationError = "";
+    renderLocationMessage();
+  } catch (error) {
+    console.error("Could not reverse-geocode the delivery pin:", error);
+    state.locationError = "We couldn't find a street address for this pin. Search for the address or enter it manually.";
+    renderLocationMessage();
+  }
+}
+
+function detectDeliveryLocation() {
+  state.locationError = "";
+  state.locationStatus = "";
+  if (!window.isSecureContext) {
+    state.locationError = "Location detection requires HTTPS or localhost. Enter your delivery address below instead.";
+    renderLocationMessage();
+    return;
+  }
+  if (!navigator.geolocation) {
+    state.locationError = "This browser does not support location detection. Enter your delivery address below instead.";
+    renderLocationMessage();
+    return;
+  }
+  state.detectingLocation = true;
+  updateLocationDetectionButton();
+  navigator.geolocation.getCurrentPosition(
+    position => {
+      state.selectedAddressId = "";
+      state.deliveryLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      };
+      state.detectingLocation = false;
+      state.locationError = "";
+      state.locationStatus = GEOAPIFY_API_KEY
+        ? "GPS location detected. Confirm the point on the map or add a street address below."
+        : "GPS location detected. Add a street address below; configure Geoapify to display the map.";
+      updateLocationDetectionButton();
+      updateDeliveryMapCaption();
+      renderLocationMessage();
+      if (deliveryMap) {
+        placeDeliveryMarker(position.coords.latitude, position.coords.longitude);
+        deliveryMap.setView([position.coords.latitude, position.coords.longitude], 17);
+      } else {
+        showMapUnavailable("GPS coordinates are ready to save. Configure Geoapify to display the map and search addresses.");
+      }
+      if (GEOAPIFY_API_KEY) {
+        void reverseGeocodeDeliveryPoint(position.coords.latitude, position.coords.longitude);
+      }
+    },
+    error => {
+      state.detectingLocation = false;
+      updateLocationDetectionButton();
+      state.locationError = error.code === 1
+        ? "Location permission was denied. Allow location access in your browser settings, or enter your address manually."
+        : error.code === 2
+          ? "Your location is unavailable right now. Check your device location settings or enter your address manually."
+          : "Location detection timed out. Try again or enter your address manually.";
+      renderLocationMessage();
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+  );
 }
 
 function toast(message) {
@@ -666,7 +1111,8 @@ function categoryPage(category) {
   const eyebrow = category.id === "food" ? "RESTAURANTS AROUND NAIROBI" : "DELIVERED AROUND NAIROBI";
   const heading = category.id === "food" ? "Restaurants near you" : "All stores";
   const description = category.id === "food" ? "Explore local favourites, cafes and comfort food" : category.subtitle;
-  return `<main class="listing-page"><div class="breadcrumbs"><button data-route="${BASE}">Nairobi</button><span>›</span><b>${category.title}</b></div><section class="listing-hero ${category.tone}"><div><span class="listing-icon">${category.icon}</span><p class="eyebrow">${eyebrow}</p><h1>${category.title}</h1><p>${description}.</p></div><div class="listing-art"><img src="${heroImage}" alt=""></div></section><div class="listing-content"><div class="chip-row">${chips.map((chip, index) => `<button class="filter-chip ${index === 0 ? "selected" : ""}" data-filter-chip="${escapeAttr(chip)}">${chip}</button>`).join("")}<button class="filter-button" data-action="sort">☷ <span>Sort & filter</span></button></div><div class="listing-header"><div><p class="eyebrow">PICKED FOR YOU</p><h2>${heading} <span class="result-count">${found.length}</span></h2></div><label class="sort-label">Sort by <select id="sort-select"><option>Recommended</option><option>Top rated</option><option>Fastest delivery</option></select></label></div><div class="store-grid store-grid-large" id="listing-stores">${found.map(storeCard).join("")}</div>${!found.length ? `<div class="empty-state"><span>🔎</span><h3>No places found</h3><p>Try a different search or choose another category.</p><button class="button-dark" data-action="clear-search">Clear search</button></div>` : ""}</div>${footer()}</main>`;
+  const paletteClass = category.id === "food" ? "palette-food" : category.id === "groceries" ? "palette-groceries" : category.id === "pharmacy" ? "palette-pharmacy" : "";
+  return `<main class="listing-page ${paletteClass}"><div class="breadcrumbs"><button data-route="${BASE}">Nairobi</button><span>›</span><b>${category.title}</b></div><section class="listing-hero ${category.tone}"><div><span class="listing-icon">${category.icon}</span><p class="eyebrow">${eyebrow}</p><h1>${category.title}</h1><p>${description}.</p></div><div class="listing-art"><img src="${heroImage}" alt=""></div></section><div class="listing-content"><div class="chip-row">${chips.map((chip, index) => `<button class="filter-chip ${index === 0 ? "selected" : ""}" data-filter-chip="${escapeAttr(chip)}">${chip}</button>`).join("")}<button class="filter-button" data-action="sort">☷ <span>Sort & filter</span></button></div><div class="listing-header"><div><p class="eyebrow">PICKED FOR YOU</p><h2>${heading} <span class="result-count">${found.length}</span></h2></div><label class="sort-label">Sort by <select id="sort-select"><option>Recommended</option><option>Top rated</option><option>Fastest delivery</option></select></label></div><div class="store-grid store-grid-large" id="listing-stores">${found.map(storeCard).join("")}</div>${!found.length ? `<div class="empty-state"><span>🔎</span><h3>No places found</h3><p>Try a different search or choose another category.</p><button class="button-dark" data-action="clear-search">Clear search</button></div>` : ""}</div>${footer()}</main>`;
 }
 
 function dealProductCards(products, storeId = "tamu-deals") {
@@ -676,14 +1122,16 @@ function dealProductCards(products, storeId = "tamu-deals") {
 function storeDetailPage(store) {
   const products = productsByStore[store.id] || [];
   const isFood = store.category === "food";
-  const tabs = isFood ? ["Popular", ...new Set(products.map(product => product.tag).filter(Boolean))] : ["Today's offers", "Fresh picks", "Pantry", "Snacks & treats"];
-  const sectionName = isFood ? "Menu" : "Today's offers";
-  const breadcrumbCategory = isFood ? "Food" : "Groceries";
-  const breadcrumbPath = `${BASE}/categories/${isFood ? "food_1" : "groceries_4"}`;
-  const eyebrow = isFood ? "MADE FRESH, READY FOR YOU" : "A LITTLE MORE FOR LESS";
-  const detailEyebrow = isFood ? "GOOD FOOD, PICKED FOR YOU" : "GOOD FINDS, PICKED FOR YOU";
-  const searchPlaceholder = isFood ? `Search ${store.name}` : "Search Fast Dine Deals Market";
-  return `<main class="listing-page store-detail-page ${isFood ? "food-menu-page" : ""}"><div class="breadcrumbs"><button data-route="${BASE}">Nairobi</button><span>›</span><button data-route="${breadcrumbPath}">${breadcrumbCategory}</button><span>›</span><b>${store.name}</b></div><section class="store-page-hero"><img src="${store.image}" alt=""><div class="store-page-copy"><span class="store-badge">${store.badge}</span><p class="eyebrow">${eyebrow}</p><h1>${store.name}</h1><p>${store.description}</p><div class="store-modal-meta"><span>★ ${store.rating} (${store.count})</span><span>◷ ${store.time}</span><span>${money(store.fee)} delivery</span></div></div></section><div class="store-detail-tags">${tabs.map((tab, i) => `<button class="filter-chip ${i === 0 ? "selected" : ""}" data-filter-chip="${escapeAttr(tab)}">${tab}</button>`).join("")}<label class="store-detail-search">⌕ <input id="store-search" aria-label="Search ${escapeAttr(store.name)} menu" placeholder="${escapeAttr(searchPlaceholder)}"></label></div><div class="store-detail-layout"><section><div class="listing-header"><div><p class="eyebrow">${detailEyebrow}</p><h2>${sectionName} <span class="result-count">${products.length}</span></h2></div><span class="store-open-label"><i></i> Open now</span></div><div class="deal-product-grid" id="deal-products">${dealProductCards(products, store.id)}</div></section><aside class="store-side-card"><span class="side-card-icon">${isFood ? "🍽️" : "🧺"}</span><p class="eyebrow">YOUR BASKET</p><h3>${cartQty() ? `${cartQty()} lovely pick${cartQty() > 1 ? "s" : ""}` : "Room for something good"}</h3><p>${cartQty() ? `${money(subtotal())} subtotal · ${money(store.fee)} delivery` : `Choose something from the menu to get started.`}</p><button class="button-dark full-width" data-action="cart">${cartQty() ? "View basket" : isFood ? "Browse menu" : "Browse offers"} <span>→</span></button></aside></div>${footer()}</main>`;
+  const isPharmacy = store.category === "pharmacy";
+  const tabs = isFood ? ["Popular", ...new Set(products.map(product => product.tag).filter(Boolean))] : ["All products", ...Array.from(new Set(products.map(product => product.tag).filter(Boolean))).slice(0, 7)];
+  const sectionName = isFood ? "Menu" : isPharmacy ? "Pharmacy & beauty essentials" : store.category === "groceries" ? "Groceries & household" : "Today's offers";
+  const breadcrumbCategory = isFood ? "Food" : isPharmacy ? "Pharmacy & Beauty" : "Groceries";
+  const breadcrumbPath = `${BASE}/categories/${isFood ? "food_1" : isPharmacy ? "pharmacy-beauty_3" : "groceries_4"}`;
+  const eyebrow = isFood ? "MADE FRESH, READY FOR YOU" : isPharmacy ? "EVERYDAY CARE, CLOSE BY" : "YOUR EVERYDAY SHOPPING, MADE EASY";
+  const detailEyebrow = isFood ? "GOOD FOOD, PICKED FOR YOU" : isPharmacy ? "CARE & WELLNESS, PICKED FOR YOU" : "GOOD FINDS, PICKED FOR YOU";
+  const searchPlaceholder = `Search ${store.name}`;
+  const paletteClass = isFood ? "palette-food" : isPharmacy ? "palette-pharmacy" : store.category === "groceries" ? "palette-groceries" : "";
+  return `<main class="listing-page store-detail-page ${isFood ? "food-menu-page" : ""} ${paletteClass}"><div class="breadcrumbs"><button data-route="${BASE}">Nairobi</button><span>›</span><button data-route="${breadcrumbPath}">${breadcrumbCategory}</button><span>›</span><b>${store.name}</b></div><section class="store-page-hero"><img src="${store.image}" alt=""><div class="store-page-copy"><span class="store-badge">${store.badge}</span><p class="eyebrow">${eyebrow}</p><h1>${store.name}</h1><p>${store.description}</p><div class="store-modal-meta"><span>★ ${store.rating} (${store.count})</span><span>◷ ${store.time}</span><span>${money(store.fee)} delivery</span></div></div></section><div class="store-detail-tags">${tabs.map((tab, i) => `<button class="filter-chip ${i === 0 ? "selected" : ""}" data-filter-chip="${escapeAttr(tab)}">${tab}</button>`).join("")}<label class="store-detail-search">⌕ <input id="store-search" aria-label="Search ${escapeAttr(store.name)} menu" placeholder="${escapeAttr(searchPlaceholder)}"></label></div><div class="store-detail-layout"><section><div class="listing-header"><div><p class="eyebrow">${detailEyebrow}</p><h2>${sectionName} <span class="result-count">${products.length}</span></h2></div><span class="store-open-label"><i></i> Open now</span></div><div class="deal-product-grid" id="deal-products">${dealProductCards(products, store.id)}</div></section><aside class="store-side-card"><span class="side-card-icon">${isFood ? "🍽️" : "🧺"}</span><p class="eyebrow">YOUR BASKET</p><h3>${cartQty() ? `${cartQty()} lovely pick${cartQty() > 1 ? "s" : ""}` : "Room for something good"}</h3><p>${cartQty() ? `${money(subtotal())} subtotal · ${money(store.fee)} delivery` : `Choose something from the menu to get started.`}</p><button class="button-dark full-width" data-action="cart">${cartQty() ? "View basket" : isFood ? "Browse menu" : "Browse offers"} <span>→</span></button></aside></div>${footer()}</main>`;
 }
 
 function footer() {
@@ -793,11 +1241,17 @@ function checkoutPage() {
   }).join("");
   const store = stores.find(item => item.id === state.cart[0]?.store);
   const itemCountLabel = `${cartQty()} ${cartQty() === 1 ? "item" : "items"}`;
-  return `<main class="checkout-page"><div class="breadcrumbs"><button data-route="${BASE}">Home</button><span>›</span><b>Checkout</b></div><div class="checkout-title"><div><p class="eyebrow">REVIEW YOUR ORDER</p><h1>Checkout</h1><p>Confirm your delivery and payment details before placing your order.</p></div><span class="checkout-step"><i>1</i> Your details <b>—</b> <i class="current">2</i> Review & pay</span></div><div class="checkout-layout"><section class="checkout-main"><div class="checkout-card delivery-checkout-card"><div class="card-heading"><div><span class="step-icon">⌖</span><div><h2>Delivery address</h2><p>Where should we bring your order?</p></div></div><button data-action="address">Change</button></div><div class="delivery-address"><span class="delivery-address-label">DELIVERING TO</span><b>${escapeHtml(state.profile.address || "Add a delivery address")}</b>${state.profile.apartment ? `<span>${escapeHtml(state.profile.apartment)}</span>` : ""}${state.profile.phone ? `<span class="delivery-contact">Contact: ${escapeHtml(state.profile.phone)}</span>` : ""}<small><i>●</i> Estimated delivery · 25–40 min</small></div><button class="add-instructions" data-action="instructions">${state.profile.note ? "✎ Edit delivery instructions" : "＋ Add delivery instructions"}</button>${state.profile.note ? `<p class="delivery-note">${escapeHtml(state.profile.note)}</p>` : ""}</div><div class="checkout-card payment-checkout-card"><div class="card-heading"><div><span class="step-icon">▤</span><div><h2>Payment method</h2><p>Choose how you’d like to pay for this order.</p></div></div><button data-route="/en/profile/account/payment-methods">Manage</button></div><div class="checkout-payments">${methods || `<div class="no-payment"><p>No payment methods added yet.</p><button data-action="add-payment-method">Add a payment method <span>→</span></button></div>`}</div>${state.payments.length ? `<button class="checkout-add-payment" data-action="add-payment-method">＋ Add another payment method</button>` : ""}<p class="checkout-payment-note"><span>🔒</span> Payment details stay protected. This storefront preview does not process payments or store full card details, security codes or M-Pesa PINs.</p></div><div class="checkout-card basket-checkout-card"><div class="card-heading"><div><span class="step-icon">🛍️</span><div><h2>Your items <small>${itemCountLabel}</small></h2><p>${store ? `From ${escapeHtml(store.name)} · ${store.time} delivery` : "Review items and quantities in your order."}</p></div></div><button data-route="${BASE}">Add items</button></div>${state.cart.length ? `<div class="checkout-items">${state.cart.map(item => { const product = productInfo(item.id); return `<div class="checkout-item"><img src="${product?.image || ""}" alt="${escapeAttr(item.name)}" loading="lazy"><div><b>${escapeHtml(item.name)}</b><small>${money(item.price)} each</small><div class="quantity-control"><button data-qty="${escapeAttr(item.id)}" data-delta="-1" aria-label="Remove one ${escapeAttr(item.name)}" ${state.submittingOrder ? "disabled" : ""}>−</button><span>${item.qty}</span><button data-qty="${escapeAttr(item.id)}" data-delta="1" aria-label="Add one ${escapeAttr(item.name)}" ${state.submittingOrder ? "disabled" : ""}>＋</button></div></div><strong>${money(item.qty * item.price)}</strong></div>`; }).join("")}</div>` : `<div class="empty-basket-inline"><span>🧺</span><p>Your basket is empty. Add a local favourite before checkout.</p><button data-route="${BASE}">Explore restaurants <span>→</span></button></div>`}</div></section><aside class="checkout-summary"><div class="summary-sticky"><p class="eyebrow">ORDER TOTAL</p><h2>Price details</h2><div class="summary-line"><span>Items <small>${itemCountLabel}</small></span><b>${money(subtotal())}</b></div><div class="summary-line"><span>Delivery fee <small>${store?.name ? `From ${escapeHtml(store.name)}` : "Local delivery"}</small></span><b>${money(fee)}</b></div><div class="summary-line"><span>Service fee <small>Order handling</small></span><b>${money(serviceFee)}</b></div>${discount ? `<div class="summary-line promo-discount"><span>${escapeHtml(state.promoCode)} discount</span><b>−${money(discount)}</b></div>` : ""}<button class="promo-button" data-route="/en/profile/account/promo-codes">${state.promoCode ? `${escapeHtml(state.promoCode)} applied · Manage promo` : "＋ Add a promo code"}</button><div class="summary-total"><span>Total to pay <small>All listed charges included</small></span><strong>${money(total)}</strong></div><button class="button-dark place-order" data-action="place-order" ${!state.cart.length || !activePayment || state.submittingOrder ? "disabled" : ""}>${state.submittingOrder ? "Saving order…" : "Place order"} <span>→</span></button><p class="checkout-terms">Orders require sign-in and are saved to your Fast Dine account. No payment or delivery is triggered.</p></div><div class="checkout-help"><span>♡</span><div><b>Need a hand?</b><small>Questions about your order? <a href="mailto:hello@fastdine.example">Contact support</a></small></div></div></aside></div>${footer()}</main>`;
+  return `<main class="checkout-page"><div class="breadcrumbs"><button data-route="${BASE}">Home</button><span>›</span><b>Checkout</b></div><div class="checkout-title"><div><p class="eyebrow">REVIEW YOUR ORDER</p><h1>Checkout</h1><p>Confirm your delivery and payment details before placing your order.</p></div><span class="checkout-step"><i>1</i> Your details <b>—</b> <i class="current">2</i> Review & pay</span></div><div class="checkout-layout"><section class="checkout-main"><div class="checkout-card delivery-checkout-card"><div class="card-heading"><div><span class="step-icon">⌖</span><div><h2>Delivery address</h2><p>Where should we bring your order?</p></div></div><button data-action="address">Change</button></div><div class="delivery-address"><span class="delivery-address-label">DELIVERING TO</span><b>${escapeHtml(state.profile.address || "Add a delivery address")}</b>${state.profile.apartment ? `<span>${escapeHtml(state.profile.apartment)}</span>` : ""}${state.profile.phone ? `<span class="delivery-contact">Contact: ${escapeHtml(state.profile.phone)}</span>` : ""}<small><i>●</i> Estimated delivery · 25–40 min</small></div><button class="add-instructions" data-action="instructions">${state.profile.note ? "✎ Edit delivery instructions" : "＋ Add delivery instructions"}</button>${state.profile.note ? `<p class="delivery-note">${escapeHtml(state.profile.note)}</p>` : ""}</div><div class="checkout-card payment-checkout-card"><div class="card-heading"><div><span class="step-icon">▤</span><div><h2>Payment method</h2><p>Choose how you’d like to pay for this order.</p></div></div><button data-route="/en/profile/account/payment-methods">Manage</button></div><div class="checkout-payments">${methods || `<div class="no-payment"><p>No payment methods added yet.</p><button data-action="add-payment-method">Add a payment method <span>→</span></button></div>`}</div>${state.payments.length ? `<button class="checkout-add-payment" data-action="add-payment-method">＋ Add another payment method</button>` : ""}<p class="checkout-payment-note"><span>🔒</span> Payment details stay protected. This storefront preview does not process payments or store full card details, security codes or M-Pesa PINs.</p></div><div class="checkout-card basket-checkout-card"><div class="card-heading"><div><span class="step-icon">🛍️</span><div><h2>Your items <small>${itemCountLabel}</small></h2><p>${store ? `From ${escapeHtml(store.name)} · ${store.time} delivery` : "Review items and quantities in your order."}</p></div></div><button data-route="${BASE}">Add items</button></div>${state.cart.length ? `<div class="checkout-items">${state.cart.map(item => { const product = productInfo(item.id, item.store); return `<div class="checkout-item"><img src="${product?.image || ""}" alt="${escapeAttr(item.name)}" loading="lazy"><div><b>${escapeHtml(item.name)}</b><small>${money(item.price)} each</small><div class="quantity-control"><button data-qty="${escapeAttr(item.id)}" data-delta="-1" aria-label="Remove one ${escapeAttr(item.name)}" ${state.submittingOrder ? "disabled" : ""}>−</button><span>${item.qty}</span><button data-qty="${escapeAttr(item.id)}" data-delta="1" aria-label="Add one ${escapeAttr(item.name)}" ${state.submittingOrder ? "disabled" : ""}>＋</button></div></div><strong>${money(item.qty * item.price)}</strong></div>`; }).join("")}</div>` : `<div class="empty-basket-inline"><span>🧺</span><p>Your basket is empty. Add a local favourite before checkout.</p><button data-route="${BASE}">Explore restaurants <span>→</span></button></div>`}</div></section><aside class="checkout-summary"><div class="summary-sticky"><p class="eyebrow">ORDER TOTAL</p><h2>Price details</h2><div class="summary-line"><span>Items <small>${itemCountLabel}</small></span><b>${money(subtotal())}</b></div><div class="summary-line"><span>Delivery fee <small>${store?.name ? `From ${escapeHtml(store.name)}` : "Local delivery"}</small></span><b>${money(fee)}</b></div><div class="summary-line"><span>Service fee <small>Order handling</small></span><b>${money(serviceFee)}</b></div>${discount ? `<div class="summary-line promo-discount"><span>${escapeHtml(state.promoCode)} discount</span><b>−${money(discount)}</b></div>` : ""}<button class="promo-button" data-route="/en/profile/account/promo-codes">${state.promoCode ? `${escapeHtml(state.promoCode)} applied · Manage promo` : "＋ Add a promo code"}</button><div class="summary-total"><span>Total to pay <small>All listed charges included</small></span><strong>${money(total)}</strong></div><button class="button-dark place-order" data-action="place-order" ${!state.cart.length || !activePayment || state.submittingOrder ? "disabled" : ""}>${state.submittingOrder ? "Saving order…" : "Place order"} <span>→</span></button><p class="checkout-terms">Orders require sign-in and are saved to your Fast Dine account. No payment or delivery is triggered.</p></div><div class="checkout-help"><span>♡</span><div><b>Need a hand?</b><small>Questions about your order? <a href="mailto:hello@fastdine.example">Contact support</a></small></div></div></aside></div>${footer()}</main>`;
 }
 
 function renderOverlay() {
   const root = document.querySelector("#overlay-root");
+  if (state.modal === "support") { root.innerHTML = supportModalContent(); return; }
+  if (state.modal === "address") {
+    root.innerHTML = modalContent();
+    void initGeoapifyDeliveryMap();
+    return;
+  }
   if (state.storeOpen) {
     const store = selectedStore();
     if (!store) { state.storeOpen = null; root.innerHTML = ""; return; }
@@ -812,11 +1266,18 @@ function renderOverlay() {
 
 function cartDrawer() {
   const fee = state.cart.length ? (stores.find(store => store.id === state.cart[0].store)?.fee ?? 79) : 0;
-  return `<div class="overlay-backdrop drawer-backdrop" data-close="cart"><aside class="cart-drawer" role="dialog" aria-modal="true"><div class="drawer-heading"><div><p class="eyebrow">YOUR PICKS</p><h2>Your basket <span>${cartQty()}</span></h2></div><button class="modal-close" data-close="cart">×</button></div>${state.cart.length ? `<div class="drawer-store"><span>🏡</span><div><b>${escapeHtml(stores.find(store => store.id === state.cart[0].store)?.name || "Your local store")}</b><small>About 25–40 min · ${money(fee)} delivery</small></div></div><div class="drawer-items">${state.cart.map(item => { const product = productInfo(item.id); return `<div class="drawer-item"><img src="${product?.image || ""}" alt=""><div class="drawer-item-info"><b>${escapeHtml(item.name)}</b><small>${money(item.price)}</small><div class="quantity-control"><button data-qty="${item.id}" data-delta="-1">−</button><span>${item.qty}</span><button data-qty="${item.id}" data-delta="1">＋</button></div></div><strong>${money(item.price * item.qty)}</strong></div>`; }).join("")}</div><div class="drawer-bottom"><div class="summary-line"><span>Subtotal</span><b>${money(subtotal())}</b></div><div class="summary-line"><span>Delivery</span><b>${money(fee)}</b></div><button class="button-dark full-width" data-route="${BASE}/order-summary">Go to checkout <span>→</span></button><button class="keep-shopping" data-close="cart">Keep browsing</button></div>` : `<div class="empty-basket"><span class="basket-doodle">🧺</span><h3>Your basket's got room for something good.</h3><p>Explore nearby favourites and add a little something.</p><button class="button-dark" data-close="cart">Explore places <span>→</span></button></div>`}</aside></div>`;
+  return `<div class="overlay-backdrop drawer-backdrop" data-close="cart"><aside class="cart-drawer" role="dialog" aria-modal="true"><div class="drawer-heading"><div><p class="eyebrow">YOUR PICKS</p><h2>Your basket <span>${cartQty()}</span></h2></div><button class="modal-close" data-close="cart">×</button></div>${state.cart.length ? `<div class="drawer-store"><span>🏡</span><div><b>${escapeHtml(stores.find(store => store.id === state.cart[0].store)?.name || "Your local store")}</b><small>About 25–40 min · ${money(fee)} delivery</small></div></div><div class="drawer-items">${state.cart.map(item => { const product = productInfo(item.id, item.store); return `<div class="drawer-item"><img src="${product?.image || ""}" alt=""><div class="drawer-item-info"><b>${escapeHtml(item.name)}</b><small>${money(item.price)}</small><div class="quantity-control"><button data-qty="${item.id}" data-delta="-1">−</button><span>${item.qty}</span><button data-qty="${item.id}" data-delta="1">＋</button></div></div><strong>${money(item.price * item.qty)}</strong></div>`; }).join("")}</div><div class="drawer-bottom"><div class="summary-line"><span>Subtotal</span><b>${money(subtotal())}</b></div><div class="summary-line"><span>Delivery</span><b>${money(fee)}</b></div><button class="button-dark full-width" data-route="${BASE}/order-summary">Go to checkout <span>→</span></button><button class="keep-shopping" data-close="cart">Keep browsing</button></div>` : `<div class="empty-basket"><span class="basket-doodle">🧺</span><h3>Your basket's got room for something good.</h3><p>Explore nearby favourites and add a little something.</p><button class="button-dark" data-close="cart">Explore places <span>→</span></button></div>`}</aside></div>`;
 }
 
 function modalContent() {
-  if (state.modal === "address") return `<div class="overlay-backdrop" data-close="modal"><section class="simple-modal" role="dialog" aria-modal="true"><button class="modal-close" data-close="modal">×</button><span class="modal-illustration">⌖</span><p class="eyebrow">A GOOD PLACE TO START</p><h2>Where should we bring it?</h2><p>We’ll show you the lovely local places around you.</p><form data-form="address"><label>Delivery address<input name="address" placeholder="Street, neighbourhood, Nairobi" value="${escapeAttr(state.profile.address)}" required autofocus></label><label>Apartment or building <span class="optional">OPTIONAL</span><input name="apartment" placeholder="e.g. Green Park Apartments" value="${escapeAttr(state.profile.apartment)}"></label><button class="button-dark full-width">Save delivery address <span>→</span></button></form><button class="use-location" data-action="location">⌖ Use my current location</button></section></div>`;
+  if (state.modal === "address") {
+    const point = state.deliveryLocation;
+    const savedAddresses = state.savedAddresses.map(address => `<article class="saved-address-card ${address.id === state.selectedAddressId ? "selected" : ""}"><div><b>${escapeHtml(address.label || "Saved address")}${address.isDefault ? " · Default" : ""}</b><p>${escapeHtml(address.address)}${address.apartment ? `, ${escapeHtml(address.apartment)}` : ""}</p></div><button type="button" data-use-address="${escapeAttr(address.id)}">Use</button><button type="button" class="saved-address-delete" data-delete-address="${escapeAttr(address.id)}" aria-label="Remove ${escapeAttr(address.label || "saved address")}">×</button></article>`).join("");
+    const addressesBlock = state.loadingAddresses
+      ? `<p class="saved-address-loading">Loading your saved addresses…</p>`
+      : savedAddresses ? `<div class="saved-addresses"><h3>Saved addresses</h3>${savedAddresses}</div>` : "";
+    return `<div class="overlay-backdrop" data-close="modal"><section class="simple-modal delivery-location-modal" role="dialog" aria-modal="true" aria-labelledby="delivery-location-title"><button class="modal-close" data-close="modal" aria-label="Close location page">×</button><span class="modal-illustration">⌖</span><p class="eyebrow">DELIVERY LOCATION</p><h2 id="delivery-location-title">Where should we bring it?</h2><p>Find an address, detect your GPS location, or move the map pin.</p>${addressesBlock}<span class="delivery-search-label">Search for a place or address</span><div id="delivery-place-autocomplete" class="delivery-search"><input id="delivery-place-search" class="delivery-search-input" type="text" placeholder="${GEOAPIFY_API_KEY ? "Start typing an address in Kenya" : "Geoapify key required to search"}" autocomplete="off" aria-label="Search for a place or address" aria-controls="delivery-place-suggestions" ${GEOAPIFY_API_KEY ? "" : "disabled"}><div id="delivery-place-suggestions" class="delivery-search-suggestions" role="listbox" aria-label="Address suggestions"></div></div>${GEOAPIFY_API_KEY ? "" : '<small class="geoapify-key-note">Map tiles, address search, and reverse geocoding need a Geoapify API key.</small>'}<button class="button-dark full-width detect-location-button" data-action="detect-location" ${state.detectingLocation ? "disabled" : ""}>${state.detectingLocation ? "Finding your location…" : "⌖ Detect My Location"}</button><p id="location-error" class="location-error" role="alert" ${state.locationError ? "" : "hidden"}>${escapeHtml(state.locationError)}</p><p id="location-status" class="location-status" role="status" ${state.locationStatus ? "" : "hidden"}>${escapeHtml(state.locationStatus)}</p><div id="delivery-map" class="delivery-map" role="application" aria-label="Interactive map. Click or drag the pin to select a delivery location."></div><p id="delivery-map-caption" class="delivery-map-caption">${point ? `Pin: ${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)} · Move the pin to adjust the address.` : "Search for an address or click the map to place a pin."}</p><p class="location-privacy-note">Map tiles and address-search requests are sent to Geoapify/OpenStreetMap. Your browser asks permission before sharing GPS location.</p><form data-form="address"><label>Delivery address<input name="address" placeholder="Street, neighbourhood, Nairobi" value="${escapeAttr(state.profile.address)}" required autofocus></label><label>Apartment or building <span class="optional">OPTIONAL</span><input name="apartment" placeholder="e.g. Green Park Apartments" value="${escapeAttr(state.profile.apartment)}"></label><label>Save address as<input name="label" placeholder="e.g. Home or Work" value="${escapeAttr(state.savedAddresses.find(address => address.id === state.selectedAddressId)?.label || "Home")}"></label><button class="button-dark full-width">${state.selectedAddressId ? "Update saved address" : "Confirm & save delivery address"} <span>→</span></button></form></section></div>`;
+  }
   if (state.modal === "payment-method-picker") return `<div class="overlay-backdrop" data-close="modal"><section class="simple-modal payment-modal" role="dialog" aria-modal="true" aria-labelledby="payment-picker-title"><button class="modal-close" data-close="modal" aria-label="Close">×</button><span class="modal-illustration">▤</span><p class="eyebrow">PAYMENT METHODS</p><h2 id="payment-picker-title">Add a way to pay</h2><p>Choose a method to add to your Fast Dine account.</p><div class="payment-picker-options"><button data-payment-add="mpesa"><span class="payment-mark mpesa">M</span><span><b>M-Pesa</b><small>Kenya mobile money preview</small></span><strong>›</strong></button><button data-payment-add="card"><span class="payment-mark card-mark">VISA</span><span><b>Credit or debit card</b><small>Visa, Mastercard or American Express</small></span><strong>›</strong></button><button data-payment-add="cash"><span class="payment-mark cash-mark">💵</span><span><b>Cash on delivery</b><small>Pay in KSh when available</small></span><strong>＋</strong></button></div><p class="payment-safety-note">Payment types depend on the area and store. This preview doesn't connect to a payment service.</p></section></div>`;
   if (state.modal === "add-payment-card") return `<div class="overlay-backdrop" data-close="modal"><section class="simple-modal payment-modal" role="dialog" aria-modal="true" aria-labelledby="add-card-title"><button class="modal-close" data-close="modal" aria-label="Close">×</button><span class="modal-illustration">▤</span><p class="eyebrow">DEMO CARD</p><h2 id="add-card-title">Add a card option</h2><p>This preview saves only the card network and last four digits.</p><form data-form="payment-card"><label>Card network<select name="brand"><option>Visa</option><option>Mastercard</option><option>American Express</option></select></label><label>Last 4 digits<input name="last4" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]{4}" placeholder="1234" required></label><button class="button-dark full-width">Save demo card <span>→</span></button></form><p class="payment-safety-note"><b>Don't enter real card details.</b> Full card number, expiry, CVV and bank codes aren't collected here. Secure card entry needs a payment provider.</p></section></div>`;
   if (state.modal === "add-payment-mpesa") return `<div class="overlay-backdrop" data-close="modal"><section class="simple-modal payment-modal" role="dialog" aria-modal="true" aria-labelledby="add-mpesa-title"><button class="modal-close" data-close="modal" aria-label="Close">×</button><span class="modal-illustration">M</span><p class="eyebrow">MOBILE MONEY PREVIEW</p><h2 id="add-mpesa-title">Add M-Pesa</h2><p>Save the number you would use for checkout.</p><form data-form="payment-mpesa"><label>Kenyan mobile number<input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678 or +254 712 345 678" value="${escapeAttr(state.profile.phone)}" required></label><button class="button-dark full-width">Save M-Pesa method <span>→</span></button></form><p class="payment-safety-note">No wallet request is sent. Never enter your M-Pesa PIN or a one-time code in this preview.</p></section></div>`;
@@ -834,7 +1295,75 @@ function supportTopicTitle() {
   if (state.supportTopic === "orders") return "A hand with your orders?";
   if (state.supportTopic === "requests") return "My requests";
   if (state.supportTopic === "other") return "Something else";
+  if (state.supportTopic === "assistant") return "Help assistant";
+  if (state.supportTopic === "request") return "Send a support request";
   return state.supportTopic;
+}
+
+function supportModalContent() {
+  const topicChoices = ["Order issue", "Payment or refund", "Account and personal details", "Delivery question", "Something else"];
+  let content;
+  if (!state.supportTopic) {
+    const latestOrder = state.orders[0];
+    content = `<div class="support-info-card"><span class="support-illustration">🛍️</span><div><b>${latestOrder ? `Your last order: ${escapeHtml(latestOrder.store)}` : "You'll see your most recent orders here."}</b>${latestOrder ? `<p>${escapeHtml(latestOrder.orderNumber || "Order")} · ${escapeHtml(latestOrder.status || "Status unavailable")}</p>` : ""}</div></div><button class="support-choice" data-support-topic="orders"><span class="support-emoji">📍</span><b>My orders</b><span class="support-arrow">›</span></button><button class="support-choice" data-support-topic="other"><span class="support-emoji">💬</span><b>Something else</b><span class="support-arrow">›</span></button><p class="support-section-label">Follow up</p><button class="support-choice" data-support-topic="requests"><span class="support-emoji">✉️</span><b>My requests (${state.supportRequests.length})</b><span class="support-arrow">›</span></button>`;
+  } else if (state.supportTopic === "orders") {
+    const latestOrder = state.orders[0];
+    content = `<div class="support-info-card">${latestOrder ? `<div><b>Your latest order</b><p>${escapeHtml(latestOrder.store || "Fast Dine order")} · ${escapeHtml(latestOrder.orderNumber || "Order")} · ${escapeHtml(latestOrder.status || "Status unavailable")}</p></div>` : `<span class="support-illustration">🛍️</span><b>Your recent orders will show up here after checkout.</b>`}</div><button class="support-choice" data-route="/en/profile/past-orders"><span class="support-emoji">📍</span><b>View all orders</b><span class="support-arrow">›</span></button><button class="support-back-link" data-support-topic="">← All support topics</button>`;
+  } else if (state.supportTopic === "other") {
+    content = `<button class="support-back-link" data-support-topic="">← All support topics</button><button class="support-choice" data-support-topic="assistant"><span class="support-emoji">✨</span><b>Chat with the help assistant</b><span class="support-arrow">›</span></button><p class="support-section-label">Or send a request</p>${topicChoices.map((topic, index) => `<button class="support-choice support-topic-choice" data-support-request-topic="${escapeAttr(topic)}"><span class="support-emoji">${["📦", "💳", "👤", "🚲", "💬"][index]}</span><b>${escapeHtml(topic)}</b><span class="support-arrow">›</span></button>`).join("")}`;
+  } else if (state.supportTopic === "assistant") {
+    content = `<button class="support-back-link" data-support-topic="other">← Something else</button><p class="support-assistant-note">Quick answers from the Fast Dine help guide. This assistant does not use a generative AI model.</p><div class="support-chat" aria-live="polite">${state.supportConversation.map(message => `<div class="support-chat-message ${message.role === "user" ? "user" : "assistant"}">${escapeHtml(message.text)}</div>`).join("")}</div><div class="support-quick-prompts">${["Where is my order?", "How do refunds work?", "Can I get medicine advice?"].map(prompt => `<button data-support-prompt="${escapeAttr(prompt)}">${escapeHtml(prompt)}</button>`).join("")}</div><form class="support-chat-form" data-form="support-chat"><label class="sr-only" for="support-question">Ask a question</label><input id="support-question" name="question" placeholder="Ask a question..." required autocomplete="off"><button class="button-dark">Send</button></form><button class="support-request-cta" data-support-request-topic="Something else">Need more help? Create a support request</button>`;
+  } else if (state.supportTopic === "request") {
+    content = `<button class="support-back-link" data-support-topic="other">← Choose another topic</button><form class="support-request-form" data-form="support-request"><label>Topic<select name="topic">${topicChoices.map(topic => `<option ${state.supportRequestTopic === topic ? "selected" : ""}>${escapeHtml(topic)}</option>`).join("")}</select></label><label>Your name<input name="name" autocomplete="name" value="${escapeAttr(state.profile.name)}" required></label><label>Email for a reply<input name="email" type="email" autocomplete="email" value="${escapeAttr(state.profile.email)}" required></label><label>Order number <span class="optional">OPTIONAL</span><input name="orderNumber" placeholder="If this is about an order"></label><label>How can we help?<textarea name="message" rows="4" maxlength="2000" required placeholder="Share the details so we can understand the issue."></textarea></label>${state.supportError ? `<p class="support-error" role="alert">${escapeHtml(state.supportError)}</p>` : ""}<p class="support-local-note">${SUPPORT_EMAIL ? "Submitting saves this request on this device and opens an email draft. The request is not sent until you send that draft." : "Submitting saves this request on this device only. It will not be sent to a support team until a support email is configured."}</p><button class="button-dark full-width">Save request${SUPPORT_EMAIL ? " and open email draft" : ""} <span>→</span></button></form>`;
+  } else if (state.supportTopic === "requests") {
+    content = `${state.supportRequests.length ? state.supportRequests.map(request => `<article class="support-request-card"><div class="support-request-heading"><b>${escapeHtml(request.topic)}</b><small>${escapeHtml(new Date(request.createdAt).toLocaleString("en-KE"))}</small></div><p>${escapeHtml(request.message)}</p><small>Ref ${escapeHtml(request.requestId)} · Saved on this device only; not sent to support.</small>${SUPPORT_EMAIL ? `<a class="support-email-link" href="${supportEmailHref(request)}">Email this request ↗</a>` : ""}</article>`).join("") : `<div class="support-info-card"><span class="support-illustration">✉️</span><div><b>No saved requests yet.</b><p>Requests you create on this device will appear here.</p></div></div>`}<p class="support-local-note">${SUPPORT_EMAIL ? "Requests are saved here; emailing opens a draft for you to review and send." : "Support email is not configured. Requests are saved on this device and are not delivered to a support team."}</p><button class="support-choice" data-support-topic="other"><span class="support-emoji">💬</span><b>Start a support request</b><span class="support-arrow">›</span></button><button class="support-back-link" data-support-topic="">← All support topics</button>`;
+  }
+  return `<div class="support-backdrop" data-close="modal"><aside class="support-panel" role="dialog" aria-modal="true" aria-labelledby="support-title"><div class="support-head"><div><span class="support-head-icon">✳</span><h2 id="support-title">Support Centre</h2></div><button data-close="modal" aria-label="Close support">⌄</button></div><div class="support-body"><h3>${state.supportTopic ? supportTopicTitle() : "What can we help with?"}</h3>${content || ""}</div></aside></div>`;
+}
+
+function supportAssistantAnswer(question) {
+  const text = question.toLowerCase();
+  if (/\b(order|delivery|courier|track|status)\b/.test(text)) {
+    const latest = state.orders[0];
+    return latest
+      ? `Your latest order (${latest.orderNumber || "order"}) is ${latest.status || "listed in your order history"}. Open My orders for its details. I can't provide live courier tracking from this help guide.`
+      : "I can't find an order on this account yet. Open My orders to check your history, or create a support request if you already placed one.";
+  }
+  if (/\b(refund\w*|return\w*|cancel\w*|payment\w*|charg\w*|mpesa|m-pesa)\b/.test(text)) {
+    return "This site preview does not process payments, cancellations, or refunds. If a real charge or order is involved, create a support request and include its order number. Never share a PIN, password, or one-time code.";
+  }
+  if (/\b(account|login|log in|password|email|verification|verify|otp|code)\b/.test(text)) {
+    return "For account access, check that you use the email you registered with. Use the sign-in or password recovery page for access problems. Never share your password or verification code; create a support request if you remain locked out.";
+  }
+  if (/\b(medicine|medical|pharmacy|symptom|dose|dosage|prescription)\b/.test(text)) {
+    return "I can't give medical or medication advice. Please ask a licensed pharmacist or clinician. For a store or delivery issue, create a support request.";
+  }
+  if (/\b(address|delivery area|deliver to|location)\b/.test(text)) {
+    return "Use the delivery address button near the top of the page to update your address. The storefront is a preview and does not dispatch a courier.";
+  }
+  return "I couldn't find that in the help guide. Create a support request and describe what you need; requests are saved on this device, and a configured support email is needed to contact the team.";
+}
+
+function askSupportAssistant(question) {
+  state.supportConversation.push({ role: "user", text: question });
+  state.supportConversation.push({ role: "assistant", text: supportAssistantAnswer(question) });
+  renderOverlay();
+  const chat = document.querySelector(".support-chat");
+  if (chat) chat.scrollTop = chat.scrollHeight;
+}
+
+function supportEmailHref(request) {
+  const subject = `Fast Dine support request ${request.requestId}: ${request.topic}`;
+  const body = [
+    `Request: ${request.requestId}`,
+    `Topic: ${request.topic}`,
+    `Name: ${request.name}`,
+    `Reply email: ${request.email}`,
+    `Order number: ${request.orderNumber || "Not provided"}`,
+    "",
+    request.message
+  ].join("\n");
+  return `mailto:${encodeURIComponent(SUPPORT_EMAIL)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 function render() {
@@ -869,7 +1398,7 @@ function render() {
 
 function addProduct(productId, storeId) {
   if (state.submittingOrder) return;
-  const product = productInfo(productId);
+  const product = productInfo(productId, storeId);
   if (!product) return;
   if (state.cart.length && state.cart[0].store !== storeId) {
     toast("Your basket is from another store. Finish that order first.");
@@ -921,7 +1450,10 @@ function submitOrder() {
             address_line: state.profile.address,
             apartment: state.profile.apartment,
             delivery_note: state.profile.note,
-            city: "Nairobi"
+            city: "Nairobi",
+            ...(Number.isFinite(state.profile.latitude) && Number.isFinite(state.profile.longitude)
+              ? { latitude: state.profile.latitude, longitude: state.profile.longitude }
+              : {})
           },
           p_payment_method_type: payment.type,
           p_payment_method_label: paymentName(payment),
@@ -994,6 +1526,15 @@ function removePaymentMethod(id) {
 document.addEventListener("click", event => {
   const route = event.target.closest("[data-route]");
   if (route) { event.preventDefault(); navigate(route.dataset.route); return; }
+  const placeholderSupportLink = event.target.closest('a[href="mailto:hello@fastdine.example"]');
+  if (placeholderSupportLink) {
+    event.preventDefault();
+    state.modal = "support";
+    state.supportRequestTopic = "Something else";
+    state.supportTopic = "request";
+    renderOverlay();
+    return;
+  }
   const category = event.target.closest("[data-category]");
   if (category) { const target = categories.find(item => item.id === category.dataset.category); if (target) navigate(target.path); return; }
   const addPayment = event.target.closest("[data-payment-add]");
@@ -1022,24 +1563,39 @@ document.addEventListener("click", event => {
   if (qty) { updateQty(qty.dataset.qty, Number(qty.dataset.delta)); return; }
   const close = event.target.closest("[data-close]");
   if (close && (close === event.target || close.tagName === "BUTTON")) { if (close.dataset.close === "cart") state.cartOpen = false; else if (close.dataset.close === "store") state.storeOpen = null; else state.modal = null; renderOverlay(); return; }
+  const useAddress = event.target.closest("[data-use-address]");
+  if (useAddress) { chooseSavedAddress(useAddress.dataset.useAddress); return; }
+  const deleteAddress = event.target.closest("[data-delete-address]");
+  if (deleteAddress) { void deleteSavedAddress(deleteAddress.dataset.deleteAddress); return; }
   const supportTopic = event.target.closest("[data-support-topic]");
   if (supportTopic) { state.supportTopic = supportTopic.dataset.supportTopic || null; renderOverlay(); return; }
+  const supportRequestTopic = event.target.closest("[data-support-request-topic]");
+  if (supportRequestTopic) {
+    state.supportRequestTopic = supportRequestTopic.dataset.supportRequestTopic;
+    state.supportTopic = "request";
+    state.supportError = "";
+    renderOverlay();
+    return;
+  }
+  const supportPrompt = event.target.closest("[data-support-prompt]");
+  if (supportPrompt) { askSupportAssistant(supportPrompt.dataset.supportPrompt); return; }
   const authMode = event.target.closest("[data-auth-mode]");
   if (authMode) { state.authMode = authMode.dataset.authMode; state.authError = ""; state.authResendAvailable = false; saveAuthFlow(); navigate(authPageUrl(state.authMode === "signup" ? "signup" : "login")); return; }
   const authStep = event.target.closest("[data-auth-step]");
   if (authStep) { const nextPage = authStep.dataset.authStep; if (nextPage === "login" || nextPage === "signup") state.authMode = nextPage; state.authError = ""; saveAuthFlow(); navigate(authPageUrl(nextPage)); return; }
   const action = event.target.closest("[data-action]")?.dataset.action;
   if (action === "cart") { state.cartOpen = !state.cartOpen; state.storeOpen = null; state.modal = null; renderOverlay(); }
-  else if (action === "address") { state.modal = "address"; renderOverlay(); }
+  else if (action === "address") { openDeliveryLocation(); }
   else if (action === "login") { navigate("/en/login?returnPath=%2Fen%2Fke%2Fnairobi"); }
   else if (action === "search") { state.modal = "search"; renderOverlay(); setTimeout(() => document.querySelector("#modal-search")?.focus(), 20); }
-  else if (action === "help") { state.supportTopic = null; state.modal = "support"; renderOverlay(); }
+  else if (action === "help") { state.supportTopic = null; state.supportError = ""; state.modal = "support"; renderOverlay(); }
+  else if (action === "detect-location") { detectDeliveryLocation(); }
   else if (action === "auth-resend") { void resendSignupConfirmation(); }
   else if (action === "recovery-resend") { state.recoveryEmailSent = false; state.authError = ""; render(); }
   else if (action === "auth-terms") { state.modal = "auth-terms"; renderOverlay(); }
-  else if (action === "contact-support") { state.modal = null; renderOverlay(); toast("Email us at hello@fastdine.example and we'll be in touch."); }
-  else if (action === "set-address") { const value = document.querySelector("#hero-address")?.value.trim(); if (value) { state.profile.address = value; save(); render(); toast("Delivery spot saved"); } else { state.modal = "address"; renderOverlay(); } }
-  else if (action === "location") { state.profile.address = "Kilimani, Nairobi"; save(); state.modal = null; render(); toast("Showing places around Kilimani"); }
+  else if (action === "contact-support") { state.supportTopic = "request"; state.supportRequestTopic = "Something else"; state.supportError = ""; state.modal = "support"; renderOverlay(); }
+  else if (action === "set-address") { const value = document.querySelector("#hero-address")?.value.trim(); if (value) { state.profile.address = value; save(); render(); toast("Delivery spot saved"); } else { openDeliveryLocation(); } }
+  else if (action === "location") { detectDeliveryLocation(); }
   else if (action === "instructions") { state.modal = "instructions"; renderOverlay(); }
   else if (action === "promo") navigate("/en/profile/account/promo-codes");
   else if (action === "add-payment-method") { state.modal = "payment-method-picker"; renderOverlay(); }
@@ -1062,7 +1618,7 @@ document.addEventListener("click", event => {
       const isDealsPage = currentPath().includes("/stores/glovo-bargains-nbo");
       const activeStore = currentStore || stores.find(store => store.id === "tamu-deals");
       const allProducts = productsByStore[activeStore.id] || [];
-      const filtered = needle === "popular" || needle === "all restaurants" || needle.startsWith("today")
+      const filtered = needle === "popular" || needle === "all products" || needle === "all restaurants" || needle.startsWith("today")
         ? allProducts
         : allProducts.filter(product => `${product.name} ${product.description} ${product.tag || ""}`.toLowerCase().includes(needle.split(" ")[0]));
       const grid = document.querySelector("#deal-products");
@@ -1135,7 +1691,34 @@ document.addEventListener("submit", async event => {
   if (!kind) return;
   event.preventDefault();
   const data = new FormData(form);
-  if (kind === "profile") {
+  if (kind === "support-chat") {
+    const question = String(data.get("question") || "").trim();
+    if (question) askSupportAssistant(question);
+  } else if (kind === "support-request") {
+    const request = {
+      requestId: `FD-${Date.now().toString(36).toUpperCase()}`,
+      topic: String(data.get("topic") || "").trim(),
+      name: String(data.get("name") || "").trim(),
+      email: String(data.get("email") || "").trim(),
+      orderNumber: String(data.get("orderNumber") || "").trim(),
+      message: String(data.get("message") || "").trim(),
+      createdAt: new Date().toISOString()
+    };
+    if (!request.topic || !request.name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(request.email) || !request.message) {
+      state.supportError = "Enter your name, a valid reply email, and a message.";
+      renderOverlay();
+      return;
+    }
+    state.supportRequests.unshift(request);
+    state.supportTopic = "requests";
+    state.supportError = "";
+    save();
+    renderOverlay();
+    toast(SUPPORT_EMAIL
+      ? "Request saved. Review and send the email draft to contact support."
+      : "Request saved on this device only; the support team has not been notified.");
+    if (SUPPORT_EMAIL) window.location.href = supportEmailHref(request);
+  } else if (kind === "profile") {
     state.profile.name = data.get("name").trim(); state.profile.email = data.get("email").trim(); state.profile.phone = data.get("phone").trim();
     save(); render(); toast("Your details are saved");
   } else if (kind === "phone") { state.profile.phone = data.get("phone").trim(); save(); render(); toast("Phone number updated"); }
@@ -1197,7 +1780,46 @@ document.addEventListener("submit", async event => {
       render();
     }
   }
-  else if (kind === "address") { state.profile.address = data.get("address").trim(); state.profile.apartment = data.get("apartment").trim(); state.modal = null; save(); render(); toast("Delivery address saved"); }
+  else if (kind === "address") {
+    const address = {
+      label: String(data.get("label") || "").trim() || "Home",
+      name: state.profile.name || "",
+      phone: state.profile.phone || "",
+      address: String(data.get("address") || "").trim(),
+      apartment: String(data.get("apartment") || "").trim(),
+      note: state.profile.note || "",
+      latitude: state.deliveryLocation?.latitude ?? null,
+      longitude: state.deliveryLocation?.longitude ?? null
+    };
+    if (!address.address) {
+      state.locationError = "Enter a delivery address before saving.";
+      renderLocationMessage();
+      return;
+    }
+    try {
+      state.profile.address = address.address;
+      state.profile.apartment = address.apartment;
+      const saveButton = form.querySelector('button[type="submit"], button:not([type])');
+      if (saveButton) { saveButton.disabled = true; saveButton.textContent = "Saving address…"; }
+      await saveDeliveryAddress(address);
+      if (address.latitude !== null && address.longitude !== null) {
+        state.profile.latitude = address.latitude;
+        state.profile.longitude = address.longitude;
+      } else {
+        delete state.profile.latitude;
+        delete state.profile.longitude;
+      }
+      state.modal = null;
+      state.locationError = "";
+      save();
+      render();
+      toast("Delivery address saved for checkout.");
+    } catch (error) {
+      console.error("Could not save the delivery address:", error);
+      state.locationError = error.message || "We couldn't save that address. Please try again.";
+      renderOverlay();
+    }
+  }
   else if (kind === "instructions") { state.profile.note = data.get("note").trim(); state.modal = null; save(); render(); toast("Delivery note saved"); }
   else if (kind === "login") {
     state.authIdentity = data.get("identity").trim().toLowerCase();

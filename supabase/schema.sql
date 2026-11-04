@@ -31,9 +31,16 @@ create table public.delivery_addresses (
   apartment text not null default '',
   delivery_note text not null default '',
   city text not null default 'Nairobi',
+  latitude double precision check (latitude is null or latitude between -90 and 90),
+  longitude double precision check (longitude is null or longitude between -180 and 180),
   is_default boolean not null default false,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint delivery_addresses_coordinates_valid check (
+    (latitude is null and longitude is null)
+    or (latitude is not null and longitude is not null
+      and latitude between -90 and 90 and longitude between -180 and 180)
+  )
 );
 
 create index delivery_addresses_user_idx on public.delivery_addresses (user_id);

@@ -6,7 +6,7 @@ The site is deployed to Vercel at [https://fast-dine.vercel.app](https://fast-di
 
 Login is split into separate routes: `/en/login`, `/en/login/signup`, `/en/login/verify`, and `/en/login/recovery`. Customers can create an account with an email and password, verify their email with a six-digit Supabase OTP, log in with the password, and request a password-reset link. OTP is used only to confirm new accounts, not to sign in; Supabase Auth manages the session.
 
-The English entry page is `/en`. It introduces the available services, highlights Nairobi places, and links into the Nairobi storefront. The address form saves the delivery address locally before opening the store pages.
+The English entry page is `/en`. It introduces the available services, highlights Nairobi places, and links into the Nairobi storefront. The delivery-location dialog uses Geoapify map tiles, address autocomplete, and geocoding with an interactive draggable pin, GPS detection, and reverse geocoding. Create a Geoapify project and set `VITE_GEOAPIFY_API_KEY` in the local environment and Vercel project settings. Restrict the key to your deployed/local website domains in Geoapify. The address, apartment, and coordinates are saved in the browser for guests or in the signed-in customer's Supabase `delivery_addresses` table. Customers can select, update, and remove saved addresses; checkout uses the selected address.
 
 ## Run locally
 
@@ -14,13 +14,17 @@ The English entry page is `/en`. It introduces the available services, highlight
 2. In this folder, run `npm install`.
 3. Run `npm run dev` and open the local URL Vite prints.
 
-The basket, profile settings, and payment-method preview remain in this browser's local storage. Signed-in customers' order history is read from Supabase, and checkout saves orders there through a database function that recalculates catalog prices and fees. `FAST10` is validated and redeemed by that function. Saving an order does not process a payment, contact a courier, or send a support request; the app never asks for a full card number, CVV, wallet PIN, or payment OTP.
+The basket, delivery address, profile settings, and payment-method preview remain in this browser's local storage. Signed-in customers' order history is read from Supabase, and checkout saves orders there through a database function that recalculates catalog prices and fees. `FAST10` is validated and redeemed by that function. Saving an order does not process a payment, contact a courier, or send a support request; the app never asks for a full card number, CVV, wallet PIN, or payment OTP.
+
+The Support Centre links to order history, offers a local help-guide assistant, and saves support requests in the current browser's local storage. The assistant uses fixed help topics and is not a generative AI model. To let customers prepare an email to your support team, set `VITE_SUPPORT_EMAIL` to the real support inbox in the local environment and Vercel project settings. Submitting a request then opens a prefilled email draft; the customer must review and send it. Without this setting, requests remain on that device and are not delivered to anyone.
+
+To add GPS coordinate storage to an existing Supabase project, run [`supabase/delivery_addresses_google_maps.sql`](supabase/delivery_addresses_google_maps.sql) in the Supabase SQL Editor. Fresh databases get those columns from [`supabase/schema.sql`](supabase/schema.sql).
 
 ## Supabase PostgreSQL
 
 The Fast Dine Supabase project is `skizdbibzzuypcvypjxq` in the Mumbai region (`ap-south-1`). Open it in the [Supabase dashboard](https://supabase.com/dashboard/project/skizdbibzzuypcvypjxq). Its API URL is `https://skizdbibzzuypcvypjxq.supabase.co`.
 
-The initial schema is in [`supabase/schema.sql`](supabase/schema.sql), and the Nairobi catalog seed is in [`supabase/seed.sql`](supabase/seed.sql). The database has tables for categories, stores, products, profiles, delivery addresses, payment-method metadata, orders, order items, promo codes, and promo redemptions. The initial seed has 14 stores and 45 products; [`supabase/checkout_catalog.sql`](supabase/checkout_catalog.sql) synchronizes the 16 active storefronts and 211 products used by the app.
+The initial schema is in [`supabase/schema.sql`](supabase/schema.sql), and the Nairobi catalog seed is in [`supabase/seed.sql`](supabase/seed.sql). The database has tables for categories, stores, products, profiles, delivery addresses, payment-method metadata, orders, order items, promo codes, and promo redemptions. The initial seed has 14 stores and 45 products; [`supabase/checkout_catalog.sql`](supabase/checkout_catalog.sql) synchronizes the 19 active storefronts and 435 products used by the app, including 30 illustrative grocery or pharmacy products per selected retailer.
 
 Row-level security is enabled on every public table. The catalog and currently active promo codes are readable without an account. Customers can manage only their own profile, addresses, and payment-method metadata; their orders are read-only to the browser. The `public.create_order` function in [`supabase/checkout.sql`](supabase/checkout.sql) creates an order and its lines atomically, using the signed-in customer ID and database catalog prices and fees. Run the initial schema and seed first, then `checkout_catalog.sql`, then `checkout.sql` in the Supabase SQL Editor. Payment records are limited to display metadata and provider references; never store full card numbers, CVV, mobile-money PINs, or one-time passwords.
 

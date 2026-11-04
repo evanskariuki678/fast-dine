@@ -423,6 +423,23 @@ const save = () => {
 const saveAuthFlow = () => sessionStorage.setItem("fastdine-auth-flow", JSON.stringify({ pending: true, mode: state.authMode, method: "email", identity: state.authIdentity, draft: state.authDraft }));
 const clearAuthFlow = () => sessionStorage.removeItem("fastdine-auth-flow");
 
+function normalizeKenyanPhone(input = "") {
+  const cleaned = String(input).replace(/[^\d+]/g, "").trim();
+  const digits = cleaned.replace(/\D/g, "");
+  let national = "";
+  if (digits.startsWith("254") && digits.length === 12) {
+    national = digits.slice(3);
+  } else if ((digits.startsWith("07") || digits.startsWith("01")) && digits.length === 10) {
+    national = digits.slice(1);
+  } else if ((digits.startsWith("7") || digits.startsWith("1")) && digits.length === 9) {
+    national = digits;
+  }
+  if (/^[17]\d{8}$/.test(national)) {
+    return `+254${national}`;
+  }
+  return null;
+}
+
 function readableAuthError(error) {
   const message = String(error?.message || "");
   const lower = message.toLowerCase();
@@ -590,15 +607,18 @@ async function signOutCustomer() {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     }
-  } catch (error) { toast(readableAuthError(error)); return; }
+  } catch (error) { toast(readableAuthError(error), "error"); return; }
+  clearAuthFlow();
+  sessionStorage.removeItem("fastdine-auth-flow");
+  localStorage.removeItem("fastdine-signed-in");
   state.profile.name = "";
   state.profile.email = "";
   state.profile.phone = "";
   state.signedIn = false;
   state.savedAddresses = read("tamu-delivery-addresses", []);
   save();
-  render();
-  toast("You've signed out on this device");
+  navigate(BASE);
+  toast("You've signed out on this device.", "info");
 }
 
 const cartQty = () => state.cart.reduce((sum, item) => sum + item.qty, 0);
@@ -1027,11 +1047,43 @@ function detectDeliveryLocation() {
   );
 }
 
-function toast(message) {
+function toast(message, type = "info") {
   const root = document.querySelector("#toast-root");
-  root.innerHTML = `<div class="toast">${message}</div>`;
+  if (!root) return;
+  const isErr = type === "error" || /error|failed|couldn't|invalid|denied|timed out/i.test(String(message));
+  const isSucc = type === "success" || /saved|added|updated|ready|signed in/i.test(String(message));
+  const finalType = type !== "info" ? type : isErr ? "error" : isSucc ? "success" : "info";
+
+  const toastEl = document.createElement("div");
+  toastEl.className = `toast toast-${finalType}`;
+  toastEl.setAttribute("role", finalType === "error" ? "alert" : "status");
+
+  const icon = document.createElement("span");
+  icon.className = "toast-icon";
+  icon.textContent = finalType === "success" ? "✓" : finalType === "error" ? "!" : "ℹ";
+
+  const text = document.createElement("span");
+  text.className = "toast-text";
+  text.textContent = String(message);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "toast-close";
+  closeBtn.setAttribute("aria-label", "Close notification");
+  closeBtn.textContent = "×";
+  closeBtn.addEventListener("click", () => {
+    toastEl.classList.add("toast-out");
+    setTimeout(() => toastEl.remove(), 200);
+  });
+
+  toastEl.append(icon, text, closeBtn);
+  root.replaceChildren(toastEl);
+
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => root.innerHTML = "", 2600);
+  toast.timer = setTimeout(() => {
+    toastEl.classList.add("toast-out");
+    setTimeout(() => toastEl.remove(), 250);
+  }, 3200);
 }
 
 function header() {
@@ -1041,7 +1093,12 @@ function header() {
   return `<header class="topbar">
     <a href="${BASE}" class="brand" data-route="${BASE}" aria-label="The Fast Dine home"><img class="brand-logo" src="/assets/the-fast-dine-logo.png" alt="The Fast Dine"></a>
     <button class="address-pill" data-action="address"><span class="pin-icon">⌖</span><span class="address-copy"><small>Deliver to</small><strong>${escapeHtml(address)}</strong></span><span class="chevron">⌄</span></button>
-    <div class="header-search"><span>⌕</span><input id="global-search" placeholder="Dishes, shops, groceries..." value="${escapeAttr(state.search)}" autocomplete="off"/><kbd>⌘ K</kbd></div>
+    <div class="header-search">
+      <span>⌕</span>
+      <input id="global-search" placeholder="Dishes, shops, groceries..." value="${escapeAttr(state.search)}" autocomplete="off" aria-label="Search dishes, shops, and groceries"/>
+      ${state.search ? `<button type="button" class="search-clear-button" data-action="clear-search" aria-label="Clear search">✕</button>` : ""}
+      <kbd title="Press Command+K or Control+K to search">⌘ K</kbd>
+    </div>
     <div class="header-actions">
       <button class="icon-button search-mobile" data-action="search" aria-label="Search">⌕</button>
       <button class="login-button" data-route="${loginPageOpen ? loginReturnPath() : accountTarget}"><span class="user-icon">♙</span><span>${loginPageOpen ? "Back" : state.signedIn ? escapeHtml(state.profile.name ? state.profile.name.split(" ")[0] : "My account") : "Log in"}</span></button>
@@ -1059,7 +1116,7 @@ function categoryTiles(compact = false) {
 
 function storeCard(store) {
   return `<article class="store-card" data-store="${store.id}" tabindex="0" role="button" aria-label="Open ${escapeAttr(store.name)}">
-    <div class="store-photo-wrap"><img class="store-photo" src="${store.image}" alt="" loading="lazy"><span class="store-badge">${store.badge}</span><span class="favorite-heart" data-favorite="${store.id}" aria-label="Save ${store.name}">♡</span>${store.promo ? `<span class="promo-tag">${store.promo}</span>` : ""}</div>
+    <div class="store-photo-wrap"><img class="store-photo" src="${store.image}" alt="${escapeAttr(store.name)}" loading="lazy"><span class="store-badge">${store.badge}</span><span class="favorite-heart" data-favorite="${store.id}" aria-label="Save ${store.name}">♡</span>${store.promo ? `<span class="promo-tag">${store.promo}</span>` : ""}</div>
     <div class="store-info"><div class="store-title-row"><strong>${store.name}</strong><span class="rating">★ ${store.rating}</span></div><p>${store.cuisine}</p><div class="store-meta"><span>◷ ${store.time}</span><i></i><span>${store.fee ? `${money(store.fee)} delivery` : "Free delivery"}</span></div></div>
   </article>`;
 }
@@ -1160,7 +1217,18 @@ function mobileDock() {
 
 function loginReturnPath() {
   const requested = new URLSearchParams(window.location.search).get("returnPath");
-  return requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : BASE;
+  if (!requested) return BASE;
+  if (
+    !requested.startsWith("/")
+    || requested.startsWith("//")
+    || requested.includes("\\")
+    || requested.includes("\r")
+    || requested.includes("\n")
+    || requested.toLowerCase().startsWith("/javascript:")
+  ) {
+    return BASE;
+  }
+  return requested;
 }
 
 function authPageUrl(page, mode = state.authMode, method = state.authMethod) {
@@ -1434,15 +1502,30 @@ function addProduct(productId, storeId) {
   const product = productInfo(productId, storeId);
   if (!product) return;
   if (state.cart.length && state.cart[0].store !== storeId) {
-    toast("Your basket is from another store. Finish that order first.");
-    return;
+    const existingStore = stores.find(s => s.id === state.cart[0].store);
+    const targetStore = stores.find(s => s.id === storeId);
+    const change = confirm(`Your basket has items from ${existingStore?.name || "another store"}. Start a new basket with ${targetStore?.name || "this store"}?`);
+    if (!change) return;
+    state.cart = [];
   }
   const item = state.cart.find(entry => entry.id === productId);
   if (item) item.qty += 1;
   else state.cart.push({ id: product.id, name: product.name, price: product.price, qty: 1, store: storeId });
   save();
   render();
-  toast(`${product.name} added to your basket`);
+  toast(`Added ${product.name} to your basket.`, "success");
+  const cartBtn = document.querySelector(".cart-button");
+  if (cartBtn) {
+    cartBtn.classList.remove("bounce");
+    void cartBtn.offsetWidth;
+    cartBtn.classList.add("bounce");
+  }
+  const cartCount = document.querySelector(".cart-count");
+  if (cartCount) {
+    cartCount.classList.remove("bounce");
+    void cartCount.offsetWidth;
+    cartCount.classList.add("bounce");
+  }
 }
 
 function updateQty(id, delta) {
@@ -1815,14 +1898,36 @@ document.addEventListener("submit", async event => {
     state.supportError = "";
     save();
     renderOverlay();
+    if (supabase) {
+      void (async () => {
+        try {
+          const user = (await supabase.auth.getUser())?.data?.user;
+          await supabase.from("support_tickets").insert({
+            ticket_number: request.requestId,
+            user_id: user?.id || null,
+            topic: request.topic,
+            customer_name: request.name,
+            email: request.email,
+            order_number: request.orderNumber || null,
+            message: request.message
+          });
+        } catch (err) {
+          console.warn("Support ticket sync note:", err);
+        }
+      })();
+    }
     toast(SUPPORT_EMAIL
       ? "Request saved. Review and send the email draft to contact support."
-      : "Request saved on this device only; the support team has not been notified.");
+      : "Request saved on this device; you can review it anytime.");
     if (SUPPORT_EMAIL) window.location.href = supportEmailHref(request);
   } else if (kind === "profile") {
     state.profile.name = data.get("name").trim(); state.profile.email = data.get("email").trim(); state.profile.phone = data.get("phone").trim();
     save(); render(); toast("Your details are saved");
-  } else if (kind === "phone") { state.profile.phone = data.get("phone").trim(); save(); render(); toast("Phone number updated"); }
+  } else if (kind === "phone") {
+    const phone = normalizeKenyanPhone(data.get("phone"));
+    if (!phone) { toast("Enter a valid Kenyan mobile number (e.g. 0712 345 678 or +254 712 345 678).", "error"); return; }
+    state.profile.phone = phone; save(); render(); toast("Phone number updated.", "success");
+  }
   else if (kind === "password") {
     if (data.get("password") !== data.get("confirm")) { toast("Those new passwords don't match yet."); return; }
     if (!supabase) { toast("Supabase is not configured. Check the VITE_SUPABASE settings."); return; }
@@ -2030,11 +2135,8 @@ document.addEventListener("submit", async event => {
     addPaymentMethod({ id: `card-${Date.now()}`, type: "card", brand: data.get("brand"), last4: data.get("last4").trim() });
   }
   else if (kind === "payment-mpesa") {
-    const rawPhone = data.get("phone").trim();
-    const digits = rawPhone.replace(/\D/g, "");
-    const localDigits = digits.startsWith("254") ? digits.slice(3) : digits.startsWith("0") ? digits.slice(1) : digits;
-    if (!/^[17]\d{8}$/.test(localDigits)) { toast("Enter a valid Kenyan mobile number."); return; }
-    const phone = `+254${localDigits}`;
+    const phone = normalizeKenyanPhone(data.get("phone"));
+    if (!phone) { toast("Enter a valid Kenyan mobile number (e.g. 0712 345 678).", "error"); return; }
     addPaymentMethod({ id: `mpesa-${Date.now()}`, type: "mpesa", label: "M-Pesa", phone });
   }
   else if (kind === "promo-code") {

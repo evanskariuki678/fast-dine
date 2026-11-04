@@ -2,20 +2,40 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#ec3d08" />
-    <meta name="description" content="The Fast Dine brings Nairobi's favourite food, groceries and essentials to your door." />
+    <meta name="description" content="The Fast Dine brings Nairobi's favourite food, groceries and essentials straight to your door with real-time tracking." />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="The Fast Dine — Good things, on the way" />
+    <meta property="og:description" content="Discover Nairobi's top restaurants, supermarkets, pharmacies and shops. Swift delivery across Nairobi, Kenya." />
+    <meta property="og:image" content="/assets/the-fast-dine-logo.png" />
+    <meta property="og:site_name" content="The Fast Dine" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="The Fast Dine — Good things, on the way" />
+    <meta name="twitter:description" content="Food, groceries, and essentials delivered across Nairobi in minutes." />
+    <meta name="twitter:image" content="/assets/the-fast-dine-logo.png" />
+
+    <!-- Security & Referrer Policies -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
     <link rel="icon" type="image/png" href="/assets/the-fast-dine-logo.png" />
+    <link rel="apple-touch-icon" href="/assets/the-fast-dine-logo.png" />
     <title>The Fast Dine — Good things, on the way</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400..800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
+    <a href="#app" class="skip-link">Skip to main content</a>
     <div id="app"></div>
     <div id="overlay-root"></div>
-    <div id="toast-root" aria-live="polite"></div>
+    <div id="toast-root" aria-live="polite" role="region" aria-label="Notifications"></div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 export default function orderEvents(req, res) {
   if (req.method !== "POST") {
@@ -13,11 +13,11 @@ export default function orderEvents(req, res) {
   }
 
   const suppliedSecret = req.headers["x-fast-dine-webhook-secret"];
-  if (
-    typeof suppliedSecret !== "string"
-    || suppliedSecret.length !== expectedSecret.length
-    || !timingSafeEqual(Buffer.from(suppliedSecret), Buffer.from(expectedSecret))
-  ) {
+  // Constant-time hash comparison to prevent timing attacks and avoid leaking secret length
+  const expectedHash = createHash("sha256").update(expectedSecret).digest();
+  const suppliedHash = createHash("sha256").update(typeof suppliedSecret === "string" ? suppliedSecret : "").digest();
+
+  if (typeof suppliedSecret !== "string" || !timingSafeEqual(suppliedHash, expectedHash)) {
     return res.status(401).json({ error: "Unauthorized." });
   }
 

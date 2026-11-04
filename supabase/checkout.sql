@@ -1,5 +1,5 @@
--- Create customer orders atomically using prices and delivery fees from the
--- database catalog. The browser never supplies trusted totals or user IDs.
+-- Create customer orders atomically using verified prices and fees from the
+-- database catalog. The client never supplies trusted totals, user IDs, or fee amounts.
 create or replace function public.create_order(
   p_store_id text,
   p_items jsonb,
@@ -11,7 +11,7 @@ create or replace function public.create_order(
 returns jsonb
 language plpgsql
 security definer
-set search_path = ''
+set search_path = public, pg_temp
 as $$
 declare
   v_user_id text := (select auth.jwt()->>'sub');
@@ -52,7 +52,7 @@ begin
   where id = p_store_id and is_active
   for share;
   if not found then
-    raise exception 'This store is unavailable. Please refresh and try again.';
+    raise exception 'This store is currently unavailable. Please refresh and try again.';
   end if;
   v_delivery_fee := v_store.delivery_fee_kes;
 
@@ -98,36 +98,41 @@ begin
       and (expires_at is null or expires_at > now())
     for update;
     if not found then
-      raise exception 'That promo code is unavailable.';
+      raise exception 'That promo code is unavailable or has expired.';
     end if;
     if v_item_subtotal < v_promo.minimum_order_kes then
-      raise exception 'This order does not meet the minimum for that promo code.';
+      raise exception 'This order does not meet the minimum amount for promo code %.', v_promo_code;
     end if;
     if exists (
       select 1 from public.promo_redemptions
       where user_id = v_user_id and promo_code = v_promo_code
     ) then
-      raise exception 'You have already used that promo code.';
+      raise exception 'You have already used promo code %.', v_promo_code;
     end if;
-    if v_promo.max_redemptions is not null and (
-      select count(*) from public.promo_redemptions where promo_code = v_promo_code
-    ) >= v_promo.max_redemptions then
-      raise exception 'That promo code has reached its redemption limit.';
+    if v_promo.max_redemptions is not null and v_promo.current_redemptions >= v_promo.max_redemptions then
+      raise exception 'Promo code % has reached its maximum redemption limit.', v_promo_code;
     end if;
     v_discount := case v_promo.discount_type
       when 'percent' then floor(v_item_subtotal * v_promo.discount_value / 100.0)::integer
       else least(v_item_subtotal, v_promo.discount_value)
     end;
+
+    update public.promo_codes
+    set current_redemptions = current_redemptions + 1
+    where code = v_promo_code;
   end if;
 
   v_total := v_item_subtotal + v_delivery_fee + v_service_fee - v_discount;
+
   insert into public.orders (
-    order_number, user_id, store_id, item_subtotal_kes, delivery_fee_kes,
-    service_fee_kes, discount_kes, total_kes, promo_code, delivery_address,
+    order_number, user_id, store_id, status, currency,
+    item_subtotal_kes, delivery_fee_kes, service_fee_kes,
+    discount_kes, total_kes, promo_code, delivery_address,
     payment_method_type, payment_method_label
   ) values (
     'FD-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10)),
-    v_user_id, p_store_id, v_item_subtotal, v_delivery_fee, v_service_fee,
+    v_user_id, p_store_id, 'placed', 'KES',
+    v_item_subtotal, v_delivery_fee, v_service_fee,
     v_discount, v_total, v_promo_code, p_delivery_address,
     p_payment_method_type, left(coalesce(p_payment_method_label, ''), 80)
   )
@@ -144,6 +149,9 @@ begin
          (line->>'line_total_kes')::integer
   from jsonb_array_elements(v_lines) as item(line);
 
+  insert into public.order_status_history (order_id, status, note)
+  values (v_order.id, 'placed', 'Order placed by customer via Fast Dine storefront');
+
   if v_promo_code is not null then
     insert into public.promo_redemptions (user_id, promo_code, order_id)
     values (v_user_id, v_promo_code, v_order.id);
@@ -154,6 +162,9 @@ begin
     'order_number', v_order.order_number,
     'placed_at', v_order.placed_at,
     'status', v_order.status,
+    'item_subtotal_kes', v_order.item_subtotal_kes,
+    'delivery_fee_kes', v_order.delivery_fee_kes,
+    'discount_kes', v_order.discount_kes,
     'total_kes', v_order.total_kes,
     'store_id', v_order.store_id
   );

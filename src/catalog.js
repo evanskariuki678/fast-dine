@@ -306,7 +306,7 @@ export async function loadSupabaseCatalog(onUpdated) {
   if (!supabaseConfigured || !supabase) return;
   try {
     const [catRes, storeRes, prodRes] = await Promise.all([
-      supabase.from("categories").select("id, name, slug, icon, is_active").eq("is_active", true),
+      supabase.from("categories").select("id, name, slug, is_active").eq("is_active", true),
       supabase.from("stores").select("*").eq("is_active", true),
       supabase.from("products").select("*").eq("is_available", true).limit(500)
     ]);
@@ -336,9 +336,10 @@ export async function loadSupabaseCatalog(onUpdated) {
     if (!storeRes.error && Array.isArray(storeRes.data) && storeRes.data.length > 0) {
       storeRes.data.forEach(remoteStore => {
         const localIndex = stores.findIndex(s => s.id === remoteStore.id);
+        const existingStore = localIndex >= 0 ? stores[localIndex] : null;
         const mapped = {
           id: remoteStore.id,
-          slug: remoteStore.slug,
+          slug: remoteStore.slug || existingStore?.slug,
           name: remoteStore.name,
           category: remoteStore.category_id,
           cuisine: remoteStore.cuisine || "Various",
@@ -373,7 +374,7 @@ export async function loadSupabaseCatalog(onUpdated) {
           ...(remoteProd.tag ? { tag: remoteProd.tag } : {})
         };
         if (existingIdx >= 0) productsByStore[storeId][existingIdx] = item;
-        else productsByStore[storeId].push(item);
+        else if (productsByStore[storeId].length < 30) productsByStore[storeId].push(item);
       });
       updated = true;
     }

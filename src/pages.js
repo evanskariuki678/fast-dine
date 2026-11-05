@@ -21,12 +21,34 @@ export function categoryTitle(id) {
   return categories.find(item => item.id === id)?.title || "Stores";
 }
 
+function searchStores(list, query) {
+  if (!query) return list;
+  if (Array.isArray(state.searchResults)) {
+    const rank = new Map();
+    state.searchResults.forEach(result => {
+      const storeId = result.type === "store" ? result.id : result.store_id;
+      if (storeId && !rank.has(storeId)) rank.set(storeId, rank.size);
+    });
+    return list.filter(store => rank.has(store.id)).sort((a, b) => rank.get(a.id) - rank.get(b.id));
+  }
+  const terms = query.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/\s+/).filter(Boolean);
+  return list.filter(store => {
+    const menuText = (productsByStore[store.id] || []).map(product => `${product.name} ${product.description} ${product.tag || ""}`).join(" ");
+    const searchableText = `${store.name} ${store.cuisine} ${store.category} ${store.description} ${store.promo || ""} ${menuText}`
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    return terms.some(term => searchableText.includes(term));
+  });
+}
+
 export function homePage() {
   const filtered = stores.filter(store => {
-    const matches = !state.search || `${store.name} ${store.cuisine} ${store.category}`.toLowerCase().includes(state.search.toLowerCase());
     const category = state.categoryFilter === "all" || store.category === state.categoryFilter;
-    return matches && category;
+    return category;
   });
+  const searchFiltered = searchStores(filtered, state.search);
+  if (state.search) {
+    return `<main class="home-page search-results-page">${section(`Results for “${escapeHtml(state.search)}”`, "Stores and menus that match your search.", searchFiltered, "SEARCH RESULTS")}${footer()}</main>`;
+  }
   const showSearch = state.search || state.categoryFilter !== "all";
   return `<main class="home-page">
     <section class="hero-section">
@@ -39,7 +61,7 @@ export function homePage() {
     </section>
     <section class="category-section"><div class="section-heading"><div><p class="eyebrow">A LITTLE BIT OF EVERYTHING</p><h2>What are you in the mood for?</h2></div><span class="small-caption">All around Nairobi <span>⌖</span></span></div>${categoryTiles()}</section>
     <section class="deal-banner"><div class="deal-copy"><span class="deal-label">A LITTLE SOMETHING EXTRA</span><h2>Good finds.<br>Even better prices.</h2><p>Fresh picks and everyday favourites on special today.</p><button class="button-dark" data-category="deals">Explore Fast Dine Deals <span>→</span></button></div><div class="deal-image"><img src="${image("photo-1542838132-92c53300491e", 1000)}" alt="Fresh market produce"><div class="deal-burst"><b>UP TO</b><strong>40%</strong><b>OFF</b></div></div></section>
-    ${showSearch ? section(state.search ? `Results for “${escapeHtml(state.search)}”` : `${categoryTitle(state.categoryFilter)} near you`, "A few lovely places to start.", filtered) : section("A few local favourites", "Loved by your neighbours, ready when you are.", stores.filter(store => store.category === "food").slice(0, 4), "AROUND THE CORNER")}
+    ${showSearch ? section(state.search ? `Results for “${escapeHtml(state.search)}”` : `${categoryTitle(state.categoryFilter)} near you`, "A few lovely places to start.", searchFiltered) : section("A few local favourites", "Loved by your neighbours, ready when you are.", stores.filter(store => store.category === "food").slice(0, 4), "AROUND THE CORNER")}
     ${!showSearch ? `<section class="feature-strip"><div class="feature-icon">🥬</div><div><p class="eyebrow">FRESH FROM THE MARKET</p><h3>Your weekly shop, sorted.</h3><p>Fresh produce, pantry essentials and a few treats for the week ahead.</p></div><button data-category="groceries">Shop groceries <span>→</span></button><div class="feature-art"><img src="${image("photo-1540420773420-3366772f4999", 660)}" alt="Colourful fresh vegetables"></div></section>${section("Something for every day", "Good food and good finds, from places around the corner.", stores.filter(store => ["groceries", "pharmacy", "shops", "alcohol"].includes(store.category)).slice(0, 4), "NEARBY & READY")}` : ""}
     <section class="promise-row"><div><span>⌖</span><strong>Made for your neighbourhood</strong><p>Nearby places you know and love.</p></div><div><span>✿</span><strong>A little more thoughtful</strong><p>Local picks, delivered with care.</p></div><div><span>◷</span><strong>On your time</strong><p>Easy ordering, right when you need it.</p></div></section>
     ${footer()}
@@ -63,11 +85,29 @@ export function englishLandingPage() {
 export function categoryPage(category) {
   const list = stores.filter(store => store.category === category.id);
   const chips = category.id === "food" ? ["Popular", "Chicken", "Burgers", "Cafe & coffee", "Bakery", "Desserts", "All restaurants"] : category.id === "groceries" ? ["Supermarket", "Fruit & veg", "Bakery", "Dairy", "Drinks", "Household"] : category.id === "pharmacy" ? ["Pharmacy", "Beauty", "Baby care", "Wellness"] : category.id === "shops" ? ["Flowers", "Beauty", "Home", "Gifts", "Electronics"] : category.id === "alcohol" ? ["Wine", "Beer", "Spirits", "Mixers", "Snacks"] : ["Top deals", "Pantry", "Fresh picks", "Bundles"];
-  const found = list.filter(store => !state.search || `${store.name} ${store.cuisine}`.toLowerCase().includes(state.search.toLowerCase()));
+  const found = searchStores(list, state.search);
   const heroImage = category.id === "food" ? image("photo-1547592180-85f173990554", 800) : category.id === "groceries" ? image("photo-1542838132-92c53300491e", 800) : category.id === "pharmacy" ? image("photo-1596462502278-27bfdc403348", 800) : category.id === "alcohol" ? image("photo-1510812431401-41d2bd2722f3", 800) : image("photo-1490750967868-88aa4486c946", 800);
-  const eyebrow = category.id === "food" ? "RESTAURANTS AROUND NAIROBI" : "DELIVERED AROUND NAIROBI";
-  const heading = category.id === "food" ? "Restaurants near you" : "All stores";
-  const description = category.id === "food" ? "Explore local favourites, cafes and comfort food" : category.subtitle;
+  const eyebrow = category.id === "food"
+    ? "RESTAURANTS AROUND NAIROBI"
+    : category.id === "groceries"
+      ? "GROCERY SHOPS AROUND NAIROBI"
+      : category.id === "pharmacy"
+        ? "PHARMACY & BEAUTY AROUND NAIROBI"
+        : "DELIVERED AROUND NAIROBI";
+  const heading = category.id === "food"
+    ? "Restaurants near you"
+    : category.id === "groceries"
+      ? "Grocery stores near you"
+      : category.id === "pharmacy"
+        ? "Pharmacy & beauty stores near you"
+        : "All stores";
+  const description = category.id === "food"
+    ? "Explore local favourites, cafes and comfort food"
+    : category.id === "groceries"
+      ? "Fresh produce, pantry staples, bakery favourites and household essentials from trusted Nairobi supermarkets"
+      : category.id === "pharmacy"
+        ? "Trusted pharmacy essentials, personal care, wellness and beauty products delivered across Nairobi"
+        : category.subtitle;
   const paletteClass = category.id === "food" ? "palette-food" : category.id === "groceries" ? "palette-groceries" : category.id === "pharmacy" ? "palette-pharmacy" : "";
   return `<main class="listing-page ${paletteClass}"><div class="breadcrumbs"><button data-route="${BASE}">Nairobi</button><span>›</span><b>${category.title}</b></div><section class="listing-hero ${category.tone}"><div><span class="listing-icon">${category.icon}</span><p class="eyebrow">${eyebrow}</p><h1>${category.title}</h1><p>${description}.</p></div><div class="listing-art"><img src="${heroImage}" alt=""></div></section><div class="listing-content"><div class="chip-row">${chips.map((chip, index) => `<button class="filter-chip ${index === 0 ? "selected" : ""}" data-filter-chip="${escapeAttr(chip)}">${chip}</button>`).join("")}<button class="filter-button" data-action="sort">☷ <span>Sort & filter</span></button></div><div class="listing-header"><div><p class="eyebrow">PICKED FOR YOU</p><h2>${heading} <span class="result-count">${found.length}</span></h2></div><label class="sort-label">Sort by <select id="sort-select"><option>Recommended</option><option>Top rated</option><option>Fastest delivery</option></select></label></div><div class="store-grid store-grid-large" id="listing-stores">${found.map(storeCard).join("")}</div>${!found.length ? `<div class="empty-state"><span>🔎</span><h3>No places found</h3><p>Try a different search or choose another category.</p><button class="button-dark" data-action="clear-search">Clear search</button></div>` : ""}</div>${footer()}</main>`;
 }
@@ -84,7 +124,7 @@ export function storeDetailPage(store) {
   const detailEyebrow = isFood ? "GOOD FOOD, PICKED FOR YOU" : isPharmacy ? "CARE & WELLNESS, PICKED FOR YOU" : "GOOD FINDS, PICKED FOR YOU";
   const searchPlaceholder = `Search ${store.name}`;
   const paletteClass = isFood ? "palette-food" : isPharmacy ? "palette-pharmacy" : store.category === "groceries" ? "palette-groceries" : "";
-  return `<main class="listing-page store-detail-page ${isFood ? "food-menu-page" : ""} ${paletteClass}"><div class="breadcrumbs"><button data-route="${BASE}">Nairobi</button><span>›</span><button data-route="${breadcrumbPath}">${breadcrumbCategory}</button><span>›</span><b>${store.name}</b></div><section class="store-page-hero"><img src="${store.image}" alt=""><div class="store-page-copy"><span class="store-badge">${store.badge}</span><p class="eyebrow">${eyebrow}</p><h1>${store.name}</h1><p>${store.description}</p><div class="store-modal-meta"><span>★ ${store.rating} (${store.count})</span><span>◷ ${store.time}</span><span>${money(store.fee)} delivery</span></div></div></section><div class="store-detail-tags">${tabs.map((tab, i) => `<button class="filter-chip ${i === 0 ? "selected" : ""}" data-filter-chip="${escapeAttr(tab)}">${tab}</button>`).join("")}<label class="store-detail-search">⌕ <input id="store-search" aria-label="Search ${escapeAttr(store.name)} menu" placeholder="${escapeAttr(searchPlaceholder)}"></label></div><div class="store-detail-layout"><section><div class="listing-header"><div><p class="eyebrow">${detailEyebrow}</p><h2>${sectionName} <span class="result-count">${products.length}</span></h2></div><span class="store-open-label"><i></i> Open now</span></div><div class="deal-product-grid" id="deal-products">${dealProductCards(products, store.id)}</div></section><aside class="store-side-card"><span class="side-card-icon">${isFood ? "🍽️" : "🧺"}</span><p class="eyebrow">YOUR BASKET</p><h3>${cartQty() ? `${cartQty()} lovely pick${cartQty() > 1 ? "s" : ""}` : "Room for something good"}</h3><p>${cartQty() ? `${money(subtotal())} subtotal · ${money(store.fee)} delivery` : `Choose something from the menu to get started.`}</p><button class="button-dark full-width" data-action="cart">${cartQty() ? "View basket" : isFood ? "Browse menu" : "Browse offers"} <span>→</span></button></aside></div>${footer()}</main>`;
+  return `<main class="listing-page store-detail-page ${isFood ? "food-menu-page" : ""} ${paletteClass}"><div class="breadcrumbs"><button data-route="${BASE}">Nairobi</button><span>›</span><button data-route="${breadcrumbPath}">${breadcrumbCategory}</button><span>›</span><b>${store.name}</b></div><section class="store-page-hero"><img src="${store.image}" alt=""><div class="store-page-copy"><span class="store-badge">${store.badge}</span><p class="eyebrow">${eyebrow}</p><h1>${store.name}</h1><p>${store.description}</p><div class="store-modal-meta"><span>★ ${store.rating} (${store.count})</span><span>◷ ${store.time}</span><span>${money(store.fee)} delivery</span>${products.length ? `<span>${products.length} products</span>` : ""}</div></div></section><div class="store-detail-tags">${tabs.map((tab, i) => `<button class="filter-chip ${i === 0 ? "selected" : ""}" data-filter-chip="${escapeAttr(tab)}">${tab}</button>`).join("")}<label class="store-detail-search">⌕ <input id="store-search" aria-label="Search ${escapeAttr(store.name)} menu" placeholder="${escapeAttr(searchPlaceholder)}"></label></div><div class="store-detail-layout"><section><div class="listing-header"><div><p class="eyebrow">${detailEyebrow}</p><h2>${sectionName} <span class="result-count">${products.length}</span></h2></div><span class="store-open-label"><i></i> Open now</span></div><div class="deal-product-grid" id="deal-products">${dealProductCards(products, store.id)}</div></section><aside class="store-side-card"><span class="side-card-icon">${isFood ? "🍽️" : isPharmacy ? "⚕" : "🧺"}</span><p class="eyebrow">YOUR BASKET</p><h3>${cartQty() ? `${cartQty()} lovely pick${cartQty() > 1 ? "s" : ""}` : "Room for something good"}</h3><p>${cartQty() ? `${money(subtotal())} subtotal · ${money(store.fee)} delivery` : `Choose something from the menu to get started.`}</p><button class="button-dark full-width" data-action="cart">${cartQty() ? "View basket" : isFood ? "Browse menu" : "Browse offers"} <span>→</span></button></aside></div>${footer()}</main>`;
 }
 
 export function authPageUrl(page, mode = state.authMode, method = state.authMethod) {

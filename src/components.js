@@ -1,6 +1,6 @@
 import { BASE, escapeHtml, escapeAttr, loginReturnPath, currentPath } from "./utils.js";
 import { state, cartQty, money, subtotal } from "./state.js";
-import { categories } from "./catalog.js";
+import { categories, productsByStore } from "./catalog.js";
 
 export function header() {
   const address = state.profile.address || "Kilimani, Nairobi";
@@ -14,6 +14,7 @@ export function header() {
       <input id="global-search" placeholder="Dishes, shops, groceries..." value="${escapeAttr(state.search)}" autocomplete="off" aria-label="Search dishes, shops, and groceries"/>
       ${state.search ? `<button type="button" class="search-clear-button" data-action="clear-search" aria-label="Clear search">✕</button>` : ""}
       <kbd title="Press Command+K or Control+K to search">⌘ K</kbd>
+      <div id="global-search-results" class="header-search-results" role="listbox" aria-label="Search results" hidden></div>
     </div>
     <div class="header-actions">
       <button class="icon-button search-mobile" data-action="search" aria-label="Search">⌕</button>
@@ -28,14 +29,22 @@ export function categoryTiles(compact = false) {
 }
 
 export function storeCard(store) {
+  const assortmentCount = productsByStore[store.id]?.length || 0;
+  const isRetailStore = ["groceries", "pharmacy"].includes(store.category);
+  const retailLabel = isRetailStore && assortmentCount
+    ? `<span>${store.category === "pharmacy" ? "Personal care & wellness" : "Fresh & everyday essentials"}</span><i></i><span>${assortmentCount} picks</span>`
+    : `<span>◷ ${store.time}</span><i></i><span>${store.fee ? `${money(store.fee)} delivery` : "Free delivery"}</span>`;
   return `<article class="store-card" data-store="${store.id}" tabindex="0" role="button" aria-label="Open ${escapeAttr(store.name)}">
     <div class="store-photo-wrap"><img class="store-photo" src="${store.image}" alt="${escapeAttr(store.name)}" loading="lazy"><span class="store-badge">${store.badge}</span><span class="favorite-heart" data-favorite="${store.id}" aria-label="Save ${store.name}">♡</span>${store.promo ? `<span class="promo-tag">${store.promo}</span>` : ""}</div>
-    <div class="store-info"><div class="store-title-row"><strong>${store.name}</strong><span class="rating">★ ${store.rating}</span></div><p>${store.cuisine}</p><div class="store-meta"><span>◷ ${store.time}</span><i></i><span>${store.fee ? `${money(store.fee)} delivery` : "Free delivery"}</span></div></div>
+    <div class="store-info"><div class="store-title-row"><strong>${store.name}</strong><span class="rating">★ ${store.rating}</span></div><p>${store.cuisine}</p><div class="store-meta">${isRetailStore ? `<span>◷ ${store.time}</span><i></i>${retailLabel}` : `<span>◷ ${store.time}</span><i></i><span>${store.fee ? `${money(store.fee)} delivery` : "Free delivery"}</span>`}</div></div>
   </article>`;
 }
 
 export function section(title, description, list, extra = "") {
-  return `<section class="content-section"><div class="section-heading"><div><p class="eyebrow">${extra || "MADE FOR YOUR DAY"}</p><h2>${title}</h2>${description ? `<p class="section-description">${description}</p>` : ""}</div><button class="text-link" data-action="see-all">See all <span>→</span></button></div><div class="store-grid">${list.map(storeCard).join("")}</div></section>`;
+  const content = list.length
+    ? `<div class="store-grid">${list.map(storeCard).join("")}</div>`
+    : `<div class="empty-state"><span>🔎</span><h3>No matches yet</h3><p>Try another dish, shop, or category.</p><button class="button-dark" data-action="clear-search">Clear search</button></div>`;
+  return `<section class="content-section"><div class="section-heading"><div><p class="eyebrow">${extra || "MADE FOR YOUR DAY"}</p><h2>${title}</h2>${description ? `<p class="section-description">${description}</p>` : ""}</div><button class="text-link" data-action="see-all">See all <span>→</span></button></div>${content}</section>`;
 }
 
 export function dealProductCards(products, storeId = "tamu-deals") {
